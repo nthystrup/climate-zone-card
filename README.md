@@ -98,4 +98,4 @@ Scheduler-specific parsing and the `scheduler.edit` payload live in `src/schedul
 ## Releasing
 
 1. Bump `version` in `package.json` and `VERSION` in `src/climate-zone-card.ts`.
-2. Commit, then tag and push: `git tag v0.1.1 && git push origin v0.1.1`. The Release workflow tests and builds the card, creates the GitHub release and attaches `climate-zone-card.js`, which HACS installs.
+2. Commit, then either push a tag (`git tag v0.1.1 && git push origin v0.1.1`) or publish a release with a new `v*` tag in the GitHub UI. The Release workflow tests and builds the card, creates the GitHub release and attaches `climate-zone-card.js`, which HACS installs.
