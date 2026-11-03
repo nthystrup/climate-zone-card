@@ -1,0 +1,115 @@
+<!doctype html>
+<html>
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Climate Zone Card preview</title>
+<style>
+  body { margin: 0; padding: 16px; font-family: Roboto, system-ui, sans-serif; background: #f4f5f7;
+    --primary-text-color:#1c1c1c; --secondary-text-color:#646a73; --divider-color:rgba(0,0,0,.12);
+    --ha-card-background:#fff; --ha-card-border-radius:12px; --primary-color:#03a9f4; }
+  body.dark { background: #111318; --primary-text-color:#e3e5e8; --secondary-text-color:#9aa0a8;
+    --divider-color:rgba(255,255,255,.14); --ha-card-background:#1c1f26; }
+  .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(400px, 100%), 400px)); gap: 16px; align-items: start; }
+  h4 { margin: 0 0 6px; font: 600 12px system-ui; color: #888; }
+</style>
+</head>
+<body>
+<div class="grid" id="grid"></div>
+<script type="module">
+  const params = new URLSearchParams(location.search);
+  const dark = params.has("dark");
+  if (dark) document.body.classList.add("dark");
+  await import("../dist/climate-zone-card.js");
+
+  const e = (id, state, attributes = {}) => ({ entity_id: id, state, attributes });
+  const today = new Date();
+  const at = (h) => { const d = new Date(today); d.setHours(h, 0, 0, 0); if (d < today) d.setDate(d.getDate() + 1); return d.toISOString(); };
+  const thermo = (id, state, over = {}) => e(id, state, {
+    hvac_modes: ["off", "heat", "cool", "heat_cool"], min_temp: 45, max_temp: 92, current_temperature: 73,
+    temperature: 82, target_temp_high: null, target_temp_low: null, current_humidity: 43, hvac_action: "idle",
+    friendly_name: id, ...over });
+  const zone = (z, o = {}) => [
+    thermo(`climate.${z}_thermostat`, o.mode ?? "cool", o.t ?? {}),
+    e(`input_select.${z}_period`, o.period ?? "Home", { options: o.options ?? ["Home", "Sleep"] }),
+    e(`input_number.${z}_home_cool`, "76", { min: 65, max: 92, step: 1 }),
+    e(`input_number.${z}_home_heat`, "68", { min: 45, max: 79, step: 1 }),
+    e(`input_number.${z}_sleep_cool`, "74", { min: 65, max: 92, step: 1 }),
+    e(`input_number.${z}_sleep_heat`, "64", { min: 45, max: 79, step: 1 }),
+    e(`input_number.${z}_evening_cool`, "75", { min: 65, max: 92, step: 1 }),
+    e(`input_number.${z}_evening_heat`, "66", { min: 45, max: 79, step: 1 }),
+    e(`input_boolean.${z}_override`, o.override ? "on" : "off"),
+    ...(o.guest === false ? [] : [e(`input_boolean.${z}_occupied`, o.occupied ? "on" : "off")]),
+    e(`switch.schedule_${z}`, "on", {
+      weekdays: ["daily"],
+      timeslots: o.timeslots ?? ["07:00 - 20:00", "20:00 - 07:00"],
+      entities: [`input_select.${z}_period`],
+      actions: (o.slotPeriods ?? ["Home", "Sleep"]).map((p) => ({ service: "input_select.select_option", data: { option: p } })),
+      current_slot: 0, next_slot: 1, next_trigger: at(20),
+    }),
+  ];
+  const common = (vac) => [
+    e("input_boolean.vacation_mode", vac ? "on" : "off"),
+    e("input_number.vacation_cool_setpoint", "82"),
+    e("input_number.vacation_heat_setpoint", "60"),
+  ];
+
+  const scenarios = [
+    ["No guests (live today)", "east_bedroom", [...zone("east_bedroom"), ...common()]],
+    ["Guests, Home period", "east_bedroom", [...zone("east_bedroom", { occupied: true, t: { temperature: 76, current_temperature: 77, hvac_action: "cooling" } }), ...common()]],
+    ["Manual hold", "east_bedroom", [...zone("east_bedroom", { occupied: true, override: true, t: { temperature: 78 } }), ...common()]],
+    ["Vacation", "east_bedroom", [...zone("east_bedroom", { occupied: true }), ...common(true)]],
+    ["Heat/Cool, 3 periods", "east_bedroom", [...zone("east_bedroom", { occupied: true, mode: "heat_cool", options: ["Home", "Sleep", "Evening"],
+      timeslots: ["07:00 - 17:00", "17:00 - 21:00", "21:00 - 07:00"], slotPeriods: ["Home", "Evening", "Sleep"],
+      t: { temperature: null, target_temp_low: 68, target_temp_high: 76, hvac_action: "heating", current_temperature: 66 } }), ...common()]],
+    ["Off", "east_bedroom", [...zone("east_bedroom", { occupied: true, mode: "off", t: { temperature: null } }), ...common()]],
+    ["Missing helpers", "west_bedroom", [...zone("east_bedroom"), ...common(), thermo("climate.west_bedroom_thermostat", "cool")]],
+    ["Linked, out of sync", "great_room", [...zone("great_room", { guest: false }).filter((x) => !x.entity_id.startsWith("climate.")), ...common(),
+      thermo("climate.living_room", "cool", { temperature: 80, current_temperature: 74, friendly_name: "Living Room" }),
+      thermo("climate.kitchen", "cool", { temperature: 79, current_temperature: 76, hvac_action: "cooling", friendly_name: "Kitchen" })],
+      { climate: ["climate.living_room", "climate.kitchen"], name: "Great Room" }],
+  ];
+
+  const grid = document.getElementById("grid");
+  window.calls = [];
+  const layout = params.get("layout") ?? "full";
+  for (const [label, z, ents, extra] of scenarios) {
+    const wrap = document.createElement("div");
+    wrap.innerHTML = `<h4>${label}</h4>`;
+    const card = document.createElement("climate-zone-card");
+    card.setConfig({ type: "custom:climate-zone-card", zone: z, layout, ...(extra ?? {}) });
+    const hass = {
+      states: Object.fromEntries(ents.map((x) => [x.entity_id, x])),
+      locale: { language: "en", time_format: "12", time_zone: "server" },
+      config: { time_zone: Intl.DateTimeFormat().resolvedOptions().timeZone },
+      themes: { darkMode: dark },
+      callService: async (d, s, data) => {
+        window.calls.push([d, s, data]);
+        console.log("callService", d, s, JSON.stringify(data));
+        const st = { ...hass.states };
+        if (d === "input_boolean") {
+          const id = data.entity_id; const cur = st[id];
+          st[id] = { ...cur, state: s === "toggle" ? (cur.state === "on" ? "off" : "on") : s === "turn_on" ? "on" : "off" };
+        }
+        if (d === "climate" && s === "set_temperature") for (const id of [].concat(data.entity_id)) {
+          const { entity_id, ...rest } = data; st[id] = { ...st[id], attributes: { ...st[id].attributes, ...rest } };
+        }
+        if (d === "input_number") st[data.entity_id] = { ...st[data.entity_id], state: String(data.value) };
+        if (d === "scheduler" && s === "edit") {
+          if (params.has("failsave")) throw new Error("Simulated failure");
+          const id = data.entity_id;
+          st[id] = { ...st[id], attributes: { ...st[id].attributes,
+            timeslots: data.timeslots.map((t) => `${t.start} - ${t.stop}`),
+            actions: data.timeslots.map((t) => ({ service: t.actions[0].service, data: t.actions[0].service_data })) } };
+        }
+        hass.states = st;
+        card.hass = { ...hass };
+      },
+    };
+    card.hass = hass;
+    wrap.append(card);
+    grid.append(wrap);
+  }
+</script>
+</body>
+</html>

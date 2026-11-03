@@ -1,0 +1,6 @@
+{
+  "name": "Climate Zone Card",
+  "filename": "climate-zone-card.js",
+  "render_readme": true,
+  "homeassistant": "2024.8.0"
+}

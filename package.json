@@ -1,0 +1,26 @@
+{
+  "name": "climate-zone-card",
+  "version": "0.1.0",
+  "description": "Lovelace card for a schedule-driven climate zone (Scheduler + per-period setpoint helpers)",
+  "scripts": {
+    "build": "rollup -c",
+    "watch": "rollup -c -w",
+    "test": "vitest run",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "lit": "^3.3.3"
+  },
+  "devDependencies": {
+    "@mdi/js": "^7.4.47",
+    "@rollup/plugin-node-resolve": "^16.0.3",
+    "@rollup/plugin-terser": "^1.0.2",
+    "@rollup/plugin-typescript": "^12.3.1",
+    "rollup": "^4.67.4",
+    "tslib": "^2.9.1",
+    "typescript": "^5.9.3",
+    "vitest": "^5.1.0"
+  },
+  "type": "module",
+  "private": true
+}
