@@ -37,7 +37,7 @@ climate:                      # default: [climate.<zone>_thermostat]
 period: input_select.east_bedroom_period
 override: input_boolean.east_bedroom_override
 occupied: input_boolean.east_bedroom_occupied   # default: used if input_boolean.<zone>_occupied exists
-schedule: switch.schedule_east_bedroom          # default: the Scheduler switch whose entities include the period helper
+schedule: switch.schedule_east_bedroom          # optional; every Scheduler switch whose entities include the period helper is used
 vacation: input_boolean.vacation_mode
 vacation_cool: input_number.vacation_cool_setpoint
 vacation_heat: input_number.vacation_heat_setpoint
@@ -68,7 +68,7 @@ climate:
 | Period setpoints | `input_number.<zone>_<period>_cool` / `_heat` | `input_number.set_value` (schedule dialog) |
 | Manual hold | `input_boolean.<zone>_override` | `input_boolean.turn_off` (Resume) |
 | Guests staying | `input_boolean.<zone>_occupied` (guest rooms only) | `input_boolean.toggle` |
-| Schedule | Scheduler `switch.schedule_*` | `scheduler.edit` (schedule dialog Save) |
+| Schedule | Scheduler `switch.schedule_*` whose `entities` include the period helper (one or more) | `scheduler.edit` / `add` / `remove` (schedule dialog Save) |
 | Vacation | `input_boolean.vacation_mode`, `input_number.vacation_cool_setpoint` / `_heat_setpoint` | — |
 
 If any required entity is missing the card shows an error listing the missing ids instead of rendering.
@@ -79,7 +79,9 @@ If any required entity is missing the card shows an error listing the missing id
 - **−/+** change the setpoint by `target_temp_step` (1° if absent), clamped to `min_temp`/`max_temp`. The number updates at once; one `climate.set_temperature` goes out 1.5 s after the last tap. In Heat/Cool, tap the low or high number to choose which end −/+ move.
 - A dial change is a manual hold by design: the controller turns the override on, not the card.
 - **Linked zones** show the mean indoor temperature and the first thermostat's setpoint; −/+ and the mode menu target all thermostats. If their setpoints or modes differ the dial reads "Out of sync".
-- **Schedule dialog**: period setpoint steppers write immediately (debounced 1 s). Drag the handles on the day bar (or focus one and use the arrow keys) to move period boundaries in 15-minute steps, minimum 30 minutes per block; Save sends one `scheduler.edit` and waits for the Scheduler entity to update before closing. Only "Every day" schedules can be edited.
+- **Schedule dialog**: period setpoint steppers write immediately (debounced 1 s). Drag the handles on the day bar (or focus one and use the arrow keys) to move period boundaries in 15-minute steps, minimum 30 minutes per block. Save writes the times and waits for Scheduler to report them before closing; a failed save keeps your edits.
+- **Different times on different days**: pick *Every day*, *Weekdays + weekend* or *Each day*, choose a day group, and edit its bar. *Copy … to* copies the selected day's times to other days. A Scheduler entity holds one set of times for a list of days, so the card keeps one entity per distinct set of times: it reuses existing ones first, creates `switch.schedule_<zone>_2`, `_3`, … with `scheduler.add` when needed, and removes leftovers with `scheduler.remove`. The dialog says which entities a save will add or remove before you press Save. Existing `workday`/`weekend` schedules are read as Mon–Fri / Sat–Sun.
+- Periods change only when a slot starts, so the early hours of a day follow the previous day's last slot; the day strip and week preview show it that way.
 - Times are shown in the Home Assistant server's time zone, because that is the clock Scheduler runs on.
 
 ## Development

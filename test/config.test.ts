@@ -34,7 +34,7 @@ describe("config", () => {
     expect(c.occupied).toBe("input_boolean.east_bedroom_occupied");
     const z = zoneEntities(c, east);
     expect(z.missing).toEqual([]);
-    expect(z.schedule).toBe("switch.schedule_east_bedroom");
+    expect(z.schedules).toEqual(["switch.schedule_east_bedroom"]);
   });
   it("treats a zone without an _occupied helper as a non-guest room", () => {
     const c = resolveConfig({ type: "x", zone: "great_room", climate: ["climate.living_room", "climate.kitchen"] }, east);

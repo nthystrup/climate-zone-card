@@ -95,12 +95,20 @@
           const { entity_id, ...rest } = data; st[id] = { ...st[id], attributes: { ...st[id].attributes, ...rest } };
         }
         if (d === "input_number") st[data.entity_id] = { ...st[data.entity_id], state: String(data.value) };
-        if (d === "scheduler" && s === "edit") {
+        if (d === "scheduler") {
           if (params.has("failsave")) throw new Error("Simulated failure");
-          const id = data.entity_id;
-          st[id] = { ...st[id], attributes: { ...st[id].attributes,
+          const read = (data) => ({
+            ...(data.weekdays ? { weekdays: data.weekdays } : {}),
             timeslots: data.timeslots.map((t) => `${t.start} - ${t.stop}`),
-            actions: data.timeslots.map((t) => ({ service: t.actions[0].service, data: t.actions[0].service_data })) } };
+            actions: data.timeslots.map((t) => ({ service: t.actions[0].service, data: t.actions[0].service_data })),
+            entities: [data.timeslots[0].actions[0].entity_id],
+          });
+          if (s === "edit") st[data.entity_id] = { ...st[data.entity_id], attributes: { ...st[data.entity_id].attributes, ...read(data) } };
+          if (s === "add") {
+            const id = "switch.schedule_" + data.name.toLowerCase().replace(/[^a-z0-9]+/g, "_").replace(/^_|_$/g, "");
+            st[id] = { entity_id: id, state: "on", attributes: { current_slot: 0, next_slot: 1, next_trigger: at(22), ...read(data) } };
+          }
+          if (s === "remove") delete st[data.entity_id];
         }
         hass.states = st;
         card.hass = { ...hass };

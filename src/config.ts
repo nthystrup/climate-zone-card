@@ -1,5 +1,5 @@
 import type { CardConfig, HomeAssistant, ResolvedConfig } from "./types";
-import { findScheduleEntity } from "./scheduler";
+import { findScheduleEntities } from "./scheduler";
 
 export const DEFAULT_PERIOD_COLORS = ["#F2B45A", "#3E4C9C", "#9AA6DF"];
 
@@ -69,7 +69,8 @@ export function setpointEntities(cfg: ResolvedConfig, period: string) {
 }
 
 export interface ZoneEntities {
-  schedule?: string;
+  /** Every Scheduler switch that drives the period helper (one per group of days). */
+  schedules: string[];
   /** Every entity the card reads; used for shouldUpdate. */
   watched: string[];
   missing: string[];
@@ -92,11 +93,11 @@ export function zoneEntities(cfg: ResolvedConfig, hass: HomeAssistant): ZoneEnti
     const sp = setpointEntities(cfg, p);
     required.push(sp.cool, sp.heat);
   }
-  const schedule = findScheduleEntity(st, cfg.period, cfg.schedule);
+  const schedules = findScheduleEntities(st, cfg.period, cfg.schedule);
   const missing = required.filter((id) => !st[id]);
-  if (!schedule) missing.push(cfg.schedule ?? `switch.schedule_${cfg.zone} (a Scheduler switch for ${cfg.period})`);
-  const watched = [...new Set([...required, ...(schedule ? [schedule] : [])])];
-  return { schedule, watched, missing };
+  if (!schedules.length) missing.push(cfg.schedule ?? `switch.schedule_${cfg.zone} (a Scheduler switch for ${cfg.period})`);
+  const watched = [...new Set([...required, ...schedules])];
+  return { schedules, watched, missing };
 }
 
 export function periodColor(cfg: ResolvedConfig, options: string[], period: string): string {

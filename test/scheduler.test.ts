@@ -4,7 +4,7 @@ import {
   buildEditPayload,
   dayPieces,
   expectedTimeslots,
-  findScheduleEntity,
+  findScheduleEntities,
   mergePlan,
   minutesByPeriod,
   moveBoundary,
@@ -94,19 +94,19 @@ describe("day strip", () => {
   });
 });
 
-describe("findScheduleEntity", () => {
+describe("findScheduleEntities", () => {
   const states = {
     "switch.something_else": { entity_id: "switch.something_else", state: "on", attributes: {} },
     "switch.schedule_abc123": { ...eastBedroomSchedule(), entity_id: "switch.schedule_abc123" },
   };
   it("matches by the period helper in `entities`, not by name", () => {
-    expect(findScheduleEntity(states, "input_select.east_bedroom_period")).toBe("switch.schedule_abc123");
+    expect(findScheduleEntities(states, "input_select.east_bedroom_period")).toEqual(["switch.schedule_abc123"]);
   });
   it("uses the configured entity when it exists", () => {
-    expect(findScheduleEntity(states, "input_select.x", "switch.something_else")).toBe("switch.something_else");
+    expect(findScheduleEntities(states, "input_select.x", "switch.something_else")).toEqual(["switch.something_else"]);
   });
   it("returns undefined when nothing matches", () => {
-    expect(findScheduleEntity(states, "input_select.west_bedroom_period")).toBeUndefined();
+    expect(findScheduleEntities(states, "input_select.west_bedroom_period")).toEqual([]);
   });
 });
 

@@ -21,13 +21,13 @@ import {
   type Thermostat,
 } from "./climate";
 import { computeStatus, fmtTemp, type Status } from "./status";
-import { formatMinutes, formatTime, nowMinutes } from "./format";
-import { DAY, dayPieces, parseSchedule, type ParsedSchedule } from "./scheduler";
+import { formatMinutes, formatTime, nowMinutes, todayIndex } from "./format";
+import { DAY, buildWeek, nextChange, parseSchedule, weekDayPieces, type ParsedSchedule, type Week } from "./scheduler";
 import { dialSvg } from "./dial";
 import "./schedule-dialog";
 import type { ClimateZoneScheduleDialog } from "./schedule-dialog";
 
-const VERSION = "0.1.0";
+const VERSION = "0.2.0";
 const SEND_DELAY_MS = 1500;
 const PENDING_TIMEOUT_MS = 10000;
 
@@ -37,7 +37,9 @@ interface Model {
   lead: Thermostat;
   options: string[];
   period?: string;
-  schedule?: ParsedSchedule;
+  schedules: ParsedSchedule[];
+  scheduleIds: string[];
+  week: Week;
   scheduleError?: string;
   status: Status;
   tone: Tone;
@@ -116,6 +118,8 @@ export class ClimateZoneCard extends LitElement {
     if (!old || !hass || !this._cfg) return true;
     if (old.themes?.darkMode !== hass.themes?.darkMode || old.locale !== hass.locale) return true;
     // Entity set can change (e.g. a helper gets created): recompute when any watched or occupied id differs.
+    // A schedule switch added or removed changes the entity count.
+    if (Object.keys(old.states).length !== Object.keys(hass.states).length) return true;
     const ids = [...this._watched, `input_boolean.${this._cfg.zone}_occupied`];
     return ids.some((id) => old.states[id] !== hass.states[id]);
   }
@@ -159,18 +163,23 @@ export class ClimateZoneCard extends LitElement {
     const options: string[] = st[cfg.period].attributes.options ?? [];
     const period = st[cfg.period].state;
 
-    let schedule: ParsedSchedule | undefined;
-    let scheduleError: string | undefined;
-    try {
-      schedule = parseSchedule(st[ents.schedule!]);
-    } catch (err) {
-      scheduleError = (err as Error).message;
+    const schedules: ParsedSchedule[] = [];
+    const errors: string[] = [];
+    for (const id of ents.schedules) {
+      try {
+        schedules.push(parseSchedule(st[id]));
+      } catch (err) {
+        errors.push((err as Error).message);
+      }
     }
+    const scheduleError = errors.length ? errors.join("; ") : undefined;
+    const week = buildWeek(schedules);
+    const next = nextChange(schedules);
 
     const override = st[cfg.override].state === "on";
     const vacation = st[cfg.vacation].state === "on";
     const occupied = cfg.occupied ? st[cfg.occupied].state === "on" : true;
-    const nextSp = schedule?.nextPeriod ? setpointEntities(cfg, schedule.nextPeriod) : undefined;
+    const nextSp = next.period ? setpointEntities(cfg, next.period) : undefined;
     const sp = this._pending ?? {};
 
     const status = computeStatus(
@@ -186,8 +195,8 @@ export class ClimateZoneCard extends LitElement {
         guestRoom: !!cfg.occupied,
         occupied,
         period,
-        nextPeriod: schedule?.nextPeriod,
-        nextTrigger: schedule?.nextTrigger,
+        nextPeriod: next.period,
+        nextTrigger: next.at,
         vacationCool: num(st[cfg.vacationCool]?.state),
         vacationHeat: num(st[cfg.vacationHeat]?.state),
         nextSetpoints: nextSp ? { cool: num(st[nextSp.cool]?.state), heat: num(st[nextSp.heat]?.state) } : undefined,
@@ -210,7 +219,9 @@ export class ClimateZoneCard extends LitElement {
       lead,
       options,
       period,
-      schedule,
+      schedules,
+      scheduleIds: ents.schedules,
+      week,
       scheduleError,
       status,
       tone,
@@ -301,13 +312,13 @@ export class ClimateZoneCard extends LitElement {
 
   private _strip(m: Model, height = 12) {
     const now = (nowMinutes(this.hass) / DAY) * 100;
-    if (m.status.setback || !m.schedule) {
+    const pieces = weekDayPieces(m.week.days, todayIndex(this.hass));
+    if (m.status.setback || !pieces.length) {
       return html`<div class="strip toned" style="height:${height}px;${toneVars(m.tone)}">
         <div class="hatch"></div>
         <div class="now" style="left:${now}%"></div>
       </div>`;
     }
-    const pieces = dayPieces(m.schedule.blocks);
     return html`<div class="strip" style="height:${height}px">
       ${pieces.map((pc) => {
         const l = (pc.start / DAY) * 100;
@@ -512,7 +523,7 @@ export class ClimateZoneCard extends LitElement {
                   @click=${() => this._toggleGuests(m)}></button>
               </label>`
             : html`<span></span>`}
-          <button class="dark-btn sched" @click=${this._openSchedule} ?disabled=${!m.schedule}>
+          <button class="dark-btn sched" @click=${this._openSchedule} ?disabled=${!m.schedules.length}>
             ${icon("calendar", 18)}<span>Schedule</span>${icon("chevron", 18)}
           </button>
         </footer>
@@ -520,7 +531,7 @@ export class ClimateZoneCard extends LitElement {
         <climate-zone-schedule-dialog
           .hass=${this.hass}
           .cfg=${cfg}
-          .scheduleId=${m.schedule?.entityId}
+          .scheduleIds=${m.scheduleIds}
           ?dark=${this.dark}
         ></climate-zone-schedule-dialog>
       </div>

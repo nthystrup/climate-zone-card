@@ -127,23 +127,6 @@ export function parseSchedule(entity: HassEntity): ParsedSchedule {
   };
 }
 
-/** Find the zone's schedule: the configured one if it exists, else the switch whose `entities` include the period helper. */
-export function findScheduleEntity(
-  states: Record<string, HassEntity>,
-  periodEntity: string,
-  configured?: string,
-): string | undefined {
-  if (configured && states[configured]) return configured;
-  for (const [id, st] of Object.entries(states)) {
-    if (!id.startsWith("switch.")) continue;
-    const ents = st.attributes?.entities;
-    if (Array.isArray(ents) && ents.includes(periodEntity) && Array.isArray(st.attributes?.timeslots)) {
-      return id;
-    }
-  }
-  return undefined;
-}
-
 /** Day-strip pieces in 0..1440; a block whose stop is before its start is split at midnight. */
 export function dayPieces(blocks: Block[]): Piece[] {
   const out: Piece[] = [];
@@ -301,4 +284,275 @@ export function expectedTimeslots(plan: DayPlan): string[] {
   return planToBlocks(mergePlan(plan))
     .sort((a, b) => a.start - b.start)
     .map((b) => `${formatHHMM(b.start)} - ${formatHHMM(b.stop)}`);
+}
+
+// ---------------------------------------------------------------- week model
+//
+// One Scheduler entity has one `weekdays` list and one set of timeslots, so a
+// week with different times on different days is several entities that all
+// select the same period helper. These helpers merge them into a Mon..Sun view
+// and work out the add/edit/remove calls that turn one week into another.
+
+export const DAYS = ["mon", "tue", "wed", "thu", "fri", "sat", "sun"] as const;
+export const DAY_SHORT = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
+export type WeekDays = (DayPlan | undefined)[];
+
+/** Scheduler weekday tokens → day indexes (0 = Monday). `workday` is approximated as Mon–Fri. */
+export function expandWeekdays(tokens: string[]): number[] {
+  const out = new Set<number>();
+  for (const t of tokens) {
+    if (t === "daily") [0, 1, 2, 3, 4, 5, 6].forEach((d) => out.add(d));
+    else if (t === "workday") [0, 1, 2, 3, 4].forEach((d) => out.add(d));
+    else if (t === "weekend") [5, 6].forEach((d) => out.add(d));
+    else {
+      const i = (DAYS as readonly string[]).indexOf(t);
+      if (i >= 0) out.add(i);
+    }
+  }
+  return [...out].sort((a, b) => a - b);
+}
+
+export function weekdayTokens(days: number[]): string[] {
+  const sorted = [...new Set(days)].sort((a, b) => a - b);
+  return sorted.length === 7 ? ["daily"] : sorted.map((d) => DAYS[d]);
+}
+
+const sameDays = (a: number[], b: number[]) => a.length === b.length && a.every((v, i) => v === b[i]);
+
+/** "Every day", "Mon–Fri", "Sat–Sun", "Mon, Wed". `sep` lets callers use an ASCII dash for entity names. */
+export function daysLabel(days: number[], sep = "–"): string {
+  const d = [...new Set(days)].sort((a, b) => a - b);
+  if (d.length === 7) return "Every day";
+  const runs: number[][] = [];
+  for (const x of d) {
+    const last = runs[runs.length - 1];
+    if (last && last[last.length - 1] === x - 1) last.push(x);
+    else runs.push([x]);
+  }
+  return runs
+    .map((r) => (r.length >= 3 ? `${DAY_SHORT[r[0]]}${sep}${DAY_SHORT[r[r.length - 1]]}` : r.map((x) => DAY_SHORT[x]).join(", ")))
+    .join(", ");
+}
+
+export interface WeekSource {
+  entityId: string;
+  weekdays: string[];
+  days: number[];
+  plan: DayPlan;
+}
+
+export interface Week {
+  days: WeekDays;
+  sources: WeekSource[];
+  /** Day indexes claimed by more than one schedule (the first, by entity id, wins). */
+  conflicts: number[];
+}
+
+/** Merge the zone's enabled schedules into one week. */
+export function buildWeek(schedules: ParsedSchedule[]): Week {
+  const days: WeekDays = Array(7).fill(undefined);
+  const conflicts = new Set<number>();
+  const sources: WeekSource[] = [];
+  for (const s of [...schedules].filter((x) => x.enabled).sort((a, b) => a.entityId.localeCompare(b.entityId))) {
+    const ds = expandWeekdays(s.weekdays);
+    const plan = blocksToPlan(s.blocks);
+    sources.push({ entityId: s.entityId, weekdays: s.weekdays, days: ds, plan });
+    for (const d of ds) {
+      if (days[d]) conflicts.add(d);
+      else days[d] = plan;
+    }
+  }
+  return { days, sources, conflicts: [...conflicts].sort((a, b) => a - b) };
+}
+
+function latestStart(plan: DayPlan, upTo: number): number | undefined {
+  let best: number | undefined;
+  plan.starts.forEach((s, i) => {
+    if (s <= upTo && (best === undefined || s > plan.starts[best])) best = i;
+  });
+  return best;
+}
+
+/**
+ * Period in force at `minute` on `day`. Periods change only when a slot starts,
+ * so before today's first start the previous day's last slot still applies.
+ */
+export function periodAtWeek(week: WeekDays, day: number, minute: number): string | undefined {
+  for (let back = 0; back < 7; back++) {
+    const plan = week[(((day - back) % 7) + 7) % 7];
+    if (!plan || !plan.starts.length) continue;
+    const i = latestStart(plan, back === 0 ? minute : DAY);
+    if (i !== undefined) return plan.periods[i];
+  }
+  return undefined;
+}
+
+/** What the day strip shows for one day of the week, including the carry-over from the day before. */
+export function weekDayPieces(week: WeekDays, day: number): Piece[] {
+  const plan = week[day];
+  const starts = plan
+    ? plan.starts.map((s, i) => ({ s, p: plan.periods[i] })).sort((a, b) => a.s - b.s)
+    : [];
+  const out: Piece[] = [];
+  const first = starts[0]?.s ?? DAY;
+  if (first > 0) {
+    const carry = periodAtWeek(week, (day + 6) % 7, DAY);
+    if (carry) out.push({ start: 0, end: first, period: carry, block: -1 });
+  }
+  starts.forEach((x, i) => {
+    const end = starts[i + 1]?.s ?? DAY;
+    if (end > x.s) out.push({ start: x.s, end, period: x.p, block: i });
+  });
+  return out;
+}
+
+export function weekEquals(a: WeekDays, b: WeekDays): boolean {
+  return a.every((p, i) => {
+    const q = b[i];
+    if (!p || !q) return !p && !q;
+    return planEquals(p, q);
+  });
+}
+
+// ---------------------------------------------------------------- editor groups
+
+export type WeekMode = "daily" | "weekend" | "each";
+
+export interface DayGroup {
+  days: number[];
+  plan: DayPlan;
+}
+
+const eq = (a?: DayPlan, b?: DayPlan) => !!a && !!b && planEquals(a, b);
+
+export function detectMode(week: WeekDays): WeekMode {
+  if (week.every((p) => eq(p, week[0]))) return "daily";
+  if ([1, 2, 3, 4].every((d) => eq(week[d], week[0])) && eq(week[6], week[5])) return "weekend";
+  return "each";
+}
+
+/** Regroup a week for a mode. Collapsing keeps Monday's times for weekdays and Saturday's for the weekend. */
+export function groupsFor(mode: WeekMode, week: WeekDays): DayGroup[] {
+  const fallback = week.find(Boolean) ?? { starts: [0], periods: [""] };
+  const at = (d: number) => week[d] ?? fallback;
+  if (mode === "daily") return [{ days: [0, 1, 2, 3, 4, 5, 6], plan: at(0) }];
+  if (mode === "weekend") {
+    return [
+      { days: [0, 1, 2, 3, 4], plan: at(0) },
+      { days: [5, 6], plan: week[5] ?? at(0) },
+    ];
+  }
+  return [0, 1, 2, 3, 4, 5, 6].map((d) => ({ days: [d], plan: at(d) }));
+}
+
+export function groupsToWeek(groups: DayGroup[]): WeekDays {
+  const week: WeekDays = Array(7).fill(undefined);
+  for (const g of groups) for (const d of g.days) week[d] = g.plan;
+  return week;
+}
+
+// ---------------------------------------------------------------- saving a week
+
+export interface AddPayload {
+  name: string;
+  weekdays: string[];
+  repeat_type: "repeat";
+  timeslots: EditPayload["timeslots"];
+}
+
+export type SaveOp =
+  | { kind: "edit"; entityId: string; payload: EditPayload }
+  | { kind: "add"; entityId: string; payload: AddPayload }
+  | { kind: "remove"; entityId: string };
+
+/** Scheduler names a new entity switch.schedule_<slugify(name)>. */
+export function slugify(s: string): string {
+  return s
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "_")
+    .replace(/^_+|_+$/g, "");
+}
+
+/**
+ * The calls that turn the zone's current schedules into `desired`. Days with
+ * identical times share one entity; existing entities are reused (same days
+ * first) before new ones are added, and leftovers are removed.
+ */
+export function planWeekSave(
+  sources: WeekSource[],
+  desired: WeekDays,
+  periodEntity: string,
+  zoneName: string,
+  existingIds: Set<string>,
+): SaveOp[] {
+  const groups: DayGroup[] = [];
+  desired.forEach((p, d) => {
+    if (!p) return;
+    const merged = mergePlan(p);
+    const g = groups.find((x) => planEquals(x.plan, merged));
+    if (g) g.days.push(d);
+    else groups.push({ days: [d], plan: merged });
+  });
+
+  const remaining = [...sources];
+  const pairs: { g: DayGroup; s?: WeekSource }[] = groups.map((g) => {
+    const i = remaining.findIndex((s) => sameDays(s.days, g.days));
+    return { g, s: i >= 0 ? remaining.splice(i, 1)[0] : undefined };
+  });
+  for (const pr of pairs) if (!pr.s && remaining.length) pr.s = remaining.shift();
+
+  const ops: SaveOp[] = [];
+  const taken = new Set(existingIds);
+  for (const { g, s } of pairs) {
+    if (s) {
+      if (sameDays(s.days, g.days) && planEquals(s.plan, g.plan)) continue;
+      const weekdays = sameDays(s.days, g.days) ? s.weekdays : weekdayTokens(g.days);
+      ops.push({ kind: "edit", entityId: s.entityId, payload: buildEditPayload(s.entityId, periodEntity, g.plan, weekdays) });
+    } else {
+      // Neutral names: the days an entity covers can change later, its id cannot.
+      let name = zoneName;
+      for (let n = 2; taken.has(`switch.schedule_${slugify(name)}`); n++) name = `${zoneName} ${n}`;
+      const entityId = `switch.schedule_${slugify(name)}`;
+      taken.add(entityId);
+      const { timeslots } = buildEditPayload(entityId, periodEntity, g.plan);
+      ops.push({ kind: "add", entityId, payload: { name, weekdays: weekdayTokens(g.days), repeat_type: "repeat", timeslots } });
+    }
+  }
+  for (const s of remaining) ops.push({ kind: "remove", entityId: s.entityId });
+  return ops;
+}
+
+/** Find every Scheduler switch that drives the zone's period helper, plus the configured one. */
+export function findScheduleEntities(
+  states: Record<string, HassEntity>,
+  periodEntity: string,
+  configured?: string,
+): string[] {
+  const out = new Set<string>();
+  if (configured && states[configured]) out.add(configured);
+  for (const [id, st] of Object.entries(states)) {
+    if (!id.startsWith("switch.")) continue;
+    const ents = st.attributes?.entities;
+    if (Array.isArray(ents) && ents.includes(periodEntity) && Array.isArray(st.attributes?.timeslots)) out.add(id);
+  }
+  return [...out].sort();
+}
+
+/** The soonest upcoming period change across the zone's enabled schedules. */
+export function nextChange(schedules: ParsedSchedule[]): { period?: string; at?: Date } {
+  let best: ParsedSchedule | undefined;
+  for (const s of schedules) {
+    if (!s.enabled || !s.nextTrigger) continue;
+    if (!best || s.nextTrigger < best.nextTrigger!) best = s;
+  }
+  return { period: best?.nextPeriod, at: best?.nextTrigger };
+}
+
+/** Copy group `from`'s times onto the groups in `to` (draft only; Save writes them). */
+export function copyGroupPlan(groups: DayGroup[], from: number, to: number[]): DayGroup[] {
+  const src = groups[from]?.plan;
+  if (!src) return groups;
+  return groups.map((g, i) =>
+    i !== from && to.includes(i) ? { days: g.days, plan: { starts: [...src.starts], periods: [...src.periods] } } : g,
+  );
 }

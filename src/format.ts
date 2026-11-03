@@ -74,3 +74,16 @@ export function formatDuration(minutes: number): string {
   if (!h) return `${m} min`;
   return `${h} h ${m} min`;
 }
+
+/** Today's weekday in the server's time zone, 0 = Monday. */
+export function todayIndex(hass?: HomeAssistant, now = new Date()): number {
+  const names = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
+  try {
+    const wd = new Intl.DateTimeFormat("en-US", { weekday: "short", timeZone: serverTimeZone(hass) }).format(now);
+    const i = names.indexOf(wd);
+    if (i >= 0) return i;
+  } catch {
+    /* fall through */
+  }
+  return (now.getDay() + 6) % 7;
+}
