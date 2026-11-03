@@ -1,11 +1,11 @@
 name: Release
 on:
-  release:
-    types: [published]
+  push:
+    tags: ["v*"]
 permissions:
   contents: write
 jobs:
-  attach:
+  release:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -14,9 +14,16 @@ jobs:
           node-version: 22
           cache: npm
       - run: npm ci
+      - run: npm run typecheck
       - run: npm test
       - run: npm run build
-      - name: Attach climate-zone-card.js to the release
+      - name: Create the release (or update it) with climate-zone-card.js attached
         env:
           GH_TOKEN: ${{ github.token }}
-        run: gh release upload "${{ github.event.release.tag_name }}" dist/climate-zone-card.js --clobber
+          TAG: ${{ github.ref_name }}
+        run: |
+          if gh release view "$TAG" >/dev/null 2>&1; then
+            gh release upload "$TAG" dist/climate-zone-card.js --clobber
+          else
+            gh release create "$TAG" dist/climate-zone-card.js --title "$TAG" --generate-notes
+          fi
