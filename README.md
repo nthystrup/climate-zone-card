@@ -28,7 +28,8 @@ Add the card from the dashboard's card picker (**Climate Zone Card**) and use th
 ### Layouts
 
 - `full` (default): dial, −/+, status line, day strip, guests toggle and the Schedule button.
-- `compact`: one row per room for phone dashboards (name, status, current temperature, target, a thin day strip). Tap it to open the full card in a dialog, including the schedule editor.
+- `compact`: one row per room for phone dashboards: name, status, − / current temperature and target / +, and a thin day strip. −/+ work like the full card's (one `climate.set_temperature` 1.5 s after the last tap; in Heat/Cool they move the end that matches `hvac_action`). Tap anywhere else on the row to open the full card in a dialog, including the schedule editor.
+- **Guests staying is optional.** The toggle and the "No guests staying" state only exist when `input_boolean.<zone>_occupied` exists (or `occupied:` is set); otherwise the room is always treated as occupied.
 
 ### YAML
 

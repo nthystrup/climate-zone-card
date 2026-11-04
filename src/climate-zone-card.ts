@@ -28,7 +28,7 @@ import "./schedule-dialog";
 import "./editor";
 import type { ClimateZoneScheduleDialog } from "./schedule-dialog";
 
-const VERSION = "0.3.0";
+const VERSION = "0.4.0";
 const SEND_DELAY_MS = 1500;
 const PENDING_TIMEOUT_MS = 10000;
 
@@ -404,9 +404,7 @@ export class ClimateZoneCard extends LitElement {
     const subtitle =
       cfg.subtitle ??
       (cfg.occupied ? `Guest room · ${m.occupied ? "guests staying" : "no guests"}` : m.thermostats.length > 1 ? `${m.thermostats.length} thermostats` : "");
-    const canStep = !off && (range ? sp.low !== undefined && sp.high !== undefined : sp.temperature !== undefined);
-    const atMin = range ? (end === "low" ? sp.low! <= m.lead.min : sp.high! <= (sp.low ?? 0) + m.lead.step) : sp.temperature! <= m.lead.min;
-    const atMax = range ? (end === "low" ? sp.low! >= (sp.high ?? 0) - m.lead.step : sp.high! >= m.lead.max) : sp.temperature! >= m.lead.max;
+    const { canStep, atMin, atMax } = this._stepState(m);
     const indoor = [
       m.current !== undefined ? `Indoor ${fmtTemp(m.current)}°` : undefined,
       m.thermostats.length === 1 && m.lead.humidity !== undefined ? `${fmtTemp(m.lead.humidity)}% RH` : undefined,
@@ -545,24 +543,53 @@ export class ClimateZoneCard extends LitElement {
     `;
   }
 
+  /** Whether −/+ can act, and whether the active setpoint is at a limit. Shared by both layouts. */
+  private _stepState(m: Model) {
+    const sp = this._shownSetpoint(m);
+    const range = isRange(m.lead.mode);
+    const end = this._end ?? defaultEnd(m.lead.action);
+    const off = m.lead.mode === "off" || !m.lead.available;
+    const canStep = !off && (range ? sp.low !== undefined && sp.high !== undefined : sp.temperature !== undefined);
+    if (!canStep) return { canStep, atMin: true, atMax: true };
+    const atMin = range
+      ? end === "low" ? sp.low! <= m.lead.min : sp.high! <= sp.low! + m.lead.step
+      : sp.temperature! <= m.lead.min;
+    const atMax = range
+      ? end === "low" ? sp.low! >= sp.high! - m.lead.step : sp.high! >= m.lead.max
+      : sp.temperature! >= m.lead.max;
+    return { canStep, atMin, atMax };
+  }
+
   private _renderCompact(m: Model) {
     const cfg = m.cfg;
     const fullConfig = { ...this._config!, layout: "full" as const };
+    const { atMin, atMax } = this._stepState(m);
+    const range = isRange(m.lead.mode);
+    const end = this._end ?? defaultEnd(m.lead.action);
+    const which = range ? (end === "low" ? " heat" : " cool") : "";
     return html`
       <div class="card compact ${m.status.kind === "hold" ? "hold" : ""}">
-        <button class="row" aria-haspopup="dialog" aria-label="${cfg.name}: ${m.status.title}. Open room" @click=${this._openRoom}>
-          <div class="c-main">
-            <div class="c-name">${cfg.name}${m.thermostats.length > 1 ? html` <span class="link">${icon("link", 16)}</span>` : nothing}</div>
-            <div class="c-status toned" style=${toneVars(m.tone)}>
+        <div class="row">
+          <button class="c-open" aria-haspopup="dialog" @click=${this._openRoom}>
+            <span class="c-name">${cfg.name}${m.thermostats.length > 1 ? html` <span class="link">${icon("link", 16)}</span>` : nothing}</span>
+            <span class="c-status toned" style=${toneVars(m.tone)}>
               <span class="dot"></span><span class="c-st">${!m.synced ? "Out of sync" : m.status.title}</span>
-            </div>
-          </div>
-          <div class="c-temp">
+            </span>
+            <span class="sr-only">Open room</span>
+          </button>
+          <button class="round c-step" aria-label="Lower${which} setpoint" ?disabled=${atMin} @click=${() => this._step(m, -1)}>
+            ${icon("minus", 20)}
+          </button>
+          <div class="c-temp" aria-live="polite">
             <div class="c-cur">${fmtTemp(m.current)}°</div>
-            <div class="c-target">${this._targetShort(m)}</div>
+            <div class="c-target ${this._pending ? "pending" : ""}">${this._targetShort(m)}</div>
           </div>
-          <span class="c-chev">${icon("chevron", 22)}</span>
-        </button>
+          <button class="round c-step" aria-label="Raise${which} setpoint" ?disabled=${atMax} @click=${() => this._step(m, 1)}>
+            ${icon("plus", 20)}
+          </button>
+          <span class="c-chev" aria-hidden="true">${icon("chevron", 22)}</span>
+        </div>
+        ${this._error ? html`<div class="note err c-err" role="alert">${this._error}</div>` : nothing}
         <div class="c-strip">${this._strip(m, 6)}</div>
       </div>
       ${this._roomOpen
@@ -872,17 +899,41 @@ export class ClimateZoneCard extends LitElement {
         overflow: hidden;
       }
       .row {
-        width: 100%;
+        position: relative;
         display: flex;
         align-items: center;
-        gap: 12px;
+        gap: 8px;
         padding: 12px 8px 10px 16px;
-        text-align: left;
         min-height: 64px;
       }
-      .c-main {
+      /* The open button covers the whole row; the steppers sit above it. */
+      .c-open {
         flex: 1;
         min-width: 0;
+        display: flex;
+        flex-direction: column;
+        text-align: left;
+        position: static;
+      }
+      .c-open::after {
+        content: "";
+        position: absolute;
+        inset: 0;
+        border-radius: var(--czc-radius);
+      }
+      .c-open:focus-visible {
+        outline: none;
+      }
+      .c-open:focus-visible::after {
+        outline: 2px solid var(--primary-color, #1f6fd1);
+        outline-offset: -2px;
+      }
+      .c-step {
+        position: relative;
+        z-index: 1;
+        width: 44px;
+        height: 44px;
+        flex: none;
       }
       .c-name {
         font-size: 16px;
@@ -893,7 +944,7 @@ export class ClimateZoneCard extends LitElement {
       }
       .c-status {
         display: flex;
-        align-items: center;
+        align-items: flex-start;
         gap: 6px;
         font-size: 13px;
         color: var(--czc-text2);
@@ -902,10 +953,13 @@ export class ClimateZoneCard extends LitElement {
       }
       .c-st {
         overflow: hidden;
-        text-overflow: ellipsis;
-        white-space: nowrap;
+        display: -webkit-box;
+        -webkit-box-orient: vertical;
+        -webkit-line-clamp: 2;
+        line-height: 1.3;
       }
       .dot {
+        margin-top: 5px;
         width: 8px;
         height: 8px;
         border-radius: 50%;
@@ -913,8 +967,17 @@ export class ClimateZoneCard extends LitElement {
         flex: none;
       }
       .c-temp {
-        text-align: right;
+        text-align: center;
         flex: none;
+        min-width: 64px;
+        pointer-events: none;
+      }
+      .c-target.pending {
+        color: var(--czc-text);
+        font-weight: 600;
+      }
+      .c-err {
+        margin: -4px 16px 8px;
       }
       .c-cur {
         font-size: 28px;
