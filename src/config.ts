@@ -105,3 +105,53 @@ export function periodColor(cfg: ResolvedConfig, options: string[], period: stri
   const i = Math.max(0, options.indexOf(period));
   return DEFAULT_PERIOD_COLORS[i % DEFAULT_PERIOD_COLORS.length];
 }
+
+/** Zone slugs that have a period helper (input_select.<zone>_period). */
+export function discoverZones(states: Record<string, { entity_id: string }>): string[] {
+  return Object.keys(states)
+    .map((id) => /^input_select\.([a-z0-9_]+)_period$/.exec(id)?.[1])
+    .filter((z): z is string => !!z)
+    .sort();
+}
+
+/**
+ * Drop keys that equal what the card would derive anyway, so the saved YAML
+ * stays as short as the hand-written examples (`zone:` alone when possible).
+ */
+export function cleanConfig(config: CardConfig, hass?: HomeAssistant): CardConfig {
+  const z = config.zone;
+  const d = resolveConfig({ type: config.type, zone: z }, hass);
+  const out: Record<string, unknown> = { type: config.type, zone: z };
+  const keep = (key: keyof CardConfig, value: unknown, dflt?: unknown) => {
+    if (value === undefined || value === null || value === "") return;
+    if (Array.isArray(value) && Array.isArray(dflt) && value.length === dflt.length && value.every((v, i) => v === dflt[i])) return;
+    if (value === dflt) return;
+    out[key] = value;
+  };
+  keep("name", config.name, d.name);
+  keep("subtitle", config.subtitle);
+  keep("layout", config.layout, "full");
+  const climate = config.climate === undefined ? undefined : Array.isArray(config.climate) ? config.climate : [config.climate];
+  if (climate && climate.length) keep("climate", climate, d.climate);
+  keep("period", config.period, d.period);
+  keep("override", config.override, d.override);
+  keep("occupied", config.occupied, d.occupied);
+  keep("schedule", config.schedule);
+  keep("vacation", config.vacation, d.vacation);
+  keep("vacation_cool", config.vacation_cool, d.vacationCool);
+  keep("vacation_heat", config.vacation_heat, d.vacationHeat);
+  keep("dial_min", config.dial_min, 60);
+  keep("dial_max", config.dial_max, 85);
+  if (config.period_colors) {
+    const options: string[] = hass?.states[config.period ?? d.period]?.attributes?.options ?? [];
+    const colors = Object.fromEntries(
+      Object.entries(config.period_colors).filter(([p, c]) => {
+        if (!c) return false;
+        const i = options.indexOf(p);
+        return i < 0 || c.toUpperCase() !== DEFAULT_PERIOD_COLORS[i % DEFAULT_PERIOD_COLORS.length];
+      }),
+    );
+    if (Object.keys(colors).length) out.period_colors = colors;
+  }
+  return out as unknown as CardConfig;
+}

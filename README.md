@@ -23,6 +23,15 @@ Copy `dist/climate-zone-card.js` to `/config/www/climate-zone-card.js` and add a
 
 ## Configuration
 
+Add the card from the dashboard's card picker (**Climate Zone Card**) and use the visual editor: pick the zone, name, layout (full card or compact row), thermostats, dial range and period colours; entity overrides are under *Entity overrides*. The editor saves only what differs from the defaults, so a typical card is just `zone:`.
+
+### Layouts
+
+- `full` (default): dial, −/+, status line, day strip, guests toggle and the Schedule button.
+- `compact`: one row per room for phone dashboards (name, status, current temperature, target, a thin day strip). Tap it to open the full card in a dialog, including the schedule editor.
+
+### YAML
+
 A zone slug is enough; every derived entity can be overridden.
 
 ```yaml
@@ -93,7 +102,7 @@ npm run typecheck
 npm run build     # dist/climate-zone-card.js
 ```
 
-`dev/preview.html` renders the card in every state against mock entities; serve the repo root (`python3 -m http.server`) and open `/dev/preview.html` (add `?dark`, `?layout=compact`, or `?failsave` to simulate a failed save).
+`dev/preview.html` renders the card in every state against mock entities and `dev/editor.html` the visual editor next to a live card; serve the repo root (`python3 -m http.server`) and open `/dev/preview.html` (add `?dark`, `?layout=compact`, or `?failsave` to simulate a failed save).
 
 Scheduler-specific parsing and the `scheduler.edit` payload live in `src/scheduler.ts` only.
 

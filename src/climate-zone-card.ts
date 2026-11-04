@@ -4,7 +4,7 @@ import type { CardConfig, HomeAssistant, ResolvedConfig } from "./types";
 import { baseStyles } from "./styles";
 import { icon, modeIcon, periodIcon, type IconName } from "./icons";
 import { TONES, periodTone, toneVars, type Tone } from "./palette";
-import { periodColor, resolveConfig, setpointEntities, validateConfig, zoneEntities } from "./config";
+import { discoverZones, periodColor, resolveConfig, setpointEntities, validateConfig, zoneEntities } from "./config";
 import {
   applyStep,
   defaultEnd,
@@ -25,9 +25,10 @@ import { formatMinutes, formatTime, nowMinutes, todayIndex } from "./format";
 import { DAY, buildWeek, nextChange, parseSchedule, weekDayPieces, type ParsedSchedule, type Week } from "./scheduler";
 import { dialSvg } from "./dial";
 import "./schedule-dialog";
+import "./editor";
 import type { ClimateZoneScheduleDialog } from "./schedule-dialog";
 
-const VERSION = "0.2.0";
+const VERSION = "0.3.0";
 const SEND_DELAY_MS = 1500;
 const PENDING_TIMEOUT_MS = 10000;
 
@@ -92,8 +93,14 @@ export class ClimateZoneCard extends LitElement {
       : { columns: 12, rows: "auto", min_columns: 6 };
   }
 
-  static getStubConfig() {
-    return { zone: "east_bedroom" };
+  static getConfigElement() {
+    return document.createElement("climate-zone-card-editor");
+  }
+
+  /** Card picker default: the first zone that has a period helper. */
+  static getStubConfig(hass?: HomeAssistant) {
+    const zones = hass ? discoverZones(hass.states) : [];
+    return { zone: zones[0] ?? "east_bedroom" };
   }
 
   // ---------------------------------------------------------------- lifecycle
@@ -967,7 +974,7 @@ if (!window.customCards.some((c) => c.type === "climate-zone-card")) {
     type: "climate-zone-card",
     name: "Climate Zone Card",
     description: "Dial, status and schedule for a Scheduler-driven climate zone",
-    preview: false,
+    preview: true,
   });
 }
 

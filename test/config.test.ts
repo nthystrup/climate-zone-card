@@ -54,3 +54,34 @@ describe("config", () => {
     expect(periodColor(c, ["Home", "Sleep", "Late"], "Late")).toBe("#9AA6DF");
   });
 });
+
+import { cleanConfig, discoverZones } from "../src/config";
+
+describe("editor helpers", () => {
+  it("discovers zones from period helpers", () => {
+    expect(discoverZones(east.states)).toEqual(["east_bedroom"]);
+  });
+  it("drops values equal to the defaults", () => {
+    expect(
+      cleanConfig(
+        {
+          type: "custom:climate-zone-card",
+          zone: "east_bedroom",
+          name: "East Bedroom",
+          layout: "full",
+          climate: ["climate.east_bedroom_thermostat"],
+          occupied: "input_boolean.east_bedroom_occupied",
+          dial_min: 60,
+          subtitle: "",
+          period_colors: { Home: "#f2b45a", Sleep: "#112233" },
+        },
+        east,
+      ),
+    ).toEqual({ type: "custom:climate-zone-card", zone: "east_bedroom", period_colors: { Sleep: "#112233" } });
+  });
+  it("keeps real overrides", () => {
+    expect(
+      cleanConfig({ type: "x", zone: "great_room", name: "Great Room", layout: "compact", climate: ["climate.living_room", "climate.kitchen"], dial_max: 90 }, east),
+    ).toEqual({ type: "x", zone: "great_room", layout: "compact", climate: ["climate.living_room", "climate.kitchen"], dial_max: 90 });
+  });
+});

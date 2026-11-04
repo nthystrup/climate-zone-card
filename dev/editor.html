@@ -1,0 +1,63 @@
+<!doctype html>
+<html>
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Climate Zone Card editor</title>
+<style>
+  body { margin: 0; padding: 16px; font-family: Roboto, system-ui, sans-serif; background: #f4f5f7;
+    --primary-text-color:#1c1c1c; --secondary-text-color:#646a73; --divider-color:rgba(0,0,0,.12);
+    --card-background-color:#fff; --ha-card-background:#fff; --primary-color:#03a9f4; }
+  body.dark { background: #111318; --primary-text-color:#e3e5e8; --secondary-text-color:#9aa0a8;
+    --divider-color:rgba(255,255,255,.14); --card-background-color:#1c1f26; --ha-card-background:#1c1f26; }
+  .wrap { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 420px); gap: 24px; max-width: 980px; }
+  @media (max-width: 760px) { .wrap { grid-template-columns: 1fr; } }
+  .panel { background: var(--card-background-color); border-radius: 12px; padding: 16px; }
+  pre { font-size: 12px; color: var(--secondary-text-color); white-space: pre-wrap; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div class="panel"><div id="ed"></div><pre id="yaml"></pre></div>
+  <div id="card"></div>
+</div>
+<script type="module">
+  const dark = new URLSearchParams(location.search).has("dark");
+  if (dark) document.body.classList.add("dark");
+  await import("../dist/climate-zone-card.js");
+  const e = (id, state, attributes = {}) => ({ entity_id: id, state, attributes });
+  const t = (id, name, temp) => e(id, "cool", { hvac_modes: ["off","heat","cool","heat_cool"], min_temp: 45, max_temp: 92,
+    current_temperature: temp, temperature: 82, current_humidity: 43, hvac_action: "idle", friendly_name: name });
+  const z = "east_bedroom";
+  const states = Object.fromEntries([
+    t("climate.east_bedroom_thermostat", "East Bedroom Thermostat", 73), t("climate.west_bedroom_thermostat", "West Bedroom Thermostat", 75),
+    t("climate.living_room", "Living Room Thermostat", 74), t("climate.kitchen", "Kitchen Thermostat", 76),
+    e(`input_select.${z}_period`, "Home", { options: ["Home", "Sleep"] }),
+    e(`input_number.${z}_home_cool`, "76"), e(`input_number.${z}_home_heat`, "68"),
+    e(`input_number.${z}_sleep_cool`, "74"), e(`input_number.${z}_sleep_heat`, "64"),
+    e(`input_boolean.${z}_override`, "off"), e(`input_boolean.${z}_occupied`, "on"),
+    e("input_boolean.vacation_mode", "off"), e("input_number.vacation_cool_setpoint", "82"), e("input_number.vacation_heat_setpoint", "60"),
+    e(`switch.schedule_${z}`, "on", { weekdays: ["daily"], timeslots: ["07:00 - 20:00", "20:00 - 07:00"], entities: [`input_select.${z}_period`],
+      actions: [{ service: "input_select.select_option", data: { option: "Home" } }, { service: "input_select.select_option", data: { option: "Sleep" } }],
+      current_slot: 0, next_slot: 1, next_trigger: new Date(Date.now() + 3600e3).toISOString() }),
+  ].map((x) => [x.entity_id, x]));
+  const hass = { states, locale: { language: "en", time_format: "12" }, config: { time_zone: "America/Phoenix" },
+    themes: { darkMode: dark }, callService: async () => {} };
+  const Card = customElements.get("climate-zone-card");
+  let config = { type: "custom:climate-zone-card", ...Card.getStubConfig(hass) };
+  const ed = Card.getConfigElement();
+  ed.hass = hass; ed.setConfig(config);
+  document.getElementById("ed").append(ed);
+  const holder = document.getElementById("card");
+  const show = () => {
+    holder.innerHTML = "";
+    const c = document.createElement("climate-zone-card");
+    try { c.setConfig(config); c.hass = hass; holder.append(c); } catch (err) { holder.textContent = err.message; }
+    document.getElementById("yaml").textContent = JSON.stringify(config, null, 2);
+    window.lastConfig = config;
+  };
+  ed.addEventListener("config-changed", (ev) => { config = ev.detail.config; ed.setConfig(config); show(); });
+  show();
+</script>
+</body>
+</html>
