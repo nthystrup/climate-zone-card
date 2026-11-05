@@ -27,6 +27,7 @@ export interface HomeAssistant {
     data?: Record<string, unknown>,
     target?: Record<string, unknown>,
   ): Promise<unknown>;
+  callWS?<T>(msg: Record<string, unknown>): Promise<T>;
 }
 
 export type Layout = "full" | "compact";
@@ -49,6 +50,7 @@ export interface CardConfig {
   dial_min?: number;
   dial_max?: number;
   period_colors?: Record<string, string>;
+  show_runtime?: boolean;
 }
 
 /** Config with every derived entity id filled in. */
@@ -70,6 +72,7 @@ export interface ResolvedConfig {
   dialMin: number;
   dialMax: number;
   periodColors: Record<string, string>;
+  showRuntime: boolean;
 }
 
 export type HvacMode = "off" | "heat" | "cool" | "heat_cool" | "auto" | "dry" | "fan_only";

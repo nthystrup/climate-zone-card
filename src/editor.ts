@@ -204,6 +204,12 @@ export class ClimateZoneCardEditor extends LitElement {
           </div>
         </fieldset>
 
+        <label class="check toggle">
+          <input type="checkbox" .checked=${cfg.show_runtime !== false}
+            @change=${(e: Event) => this._set("show_runtime", (e.target as HTMLInputElement).checked ? undefined : false)} />
+          <span>Show runtime stats <span class="help">(full card: cooling/heating time today and for the last 7 days)</span></span>
+        </label>
+
         ${options.length
           ? html`<fieldset class="field">
               <legend class="label">Period colours</legend>
@@ -375,6 +381,9 @@ export class ClimateZoneCardEditor extends LitElement {
       padding: 0 6px;
       font-size: 14px;
       cursor: pointer;
+    }
+    .toggle {
+      padding: 0;
     }
     .check input {
       width: 20px;

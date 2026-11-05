@@ -72,6 +72,29 @@
 
   const grid = document.getElementById("grid");
   window.calls = [];
+  window.wsCalls = 0;
+  // Synthetic recorder history: ~10 min cooling cycles, more of them on hotter days.
+  const fakeHistory = (msg) => {
+    window.wsCalls++; (window.wsLog ||= []).push(msg.entity_ids.join(",") + " from " + msg.start_time);
+    const start = Date.parse(msg.start_time) / 1000, end = Date.parse(msg.end_time) / 1000;
+    const out = {};
+    for (const id of msg.entity_ids) {
+      const rows = [{ s: "cool", a: { hvac_action: "idle" }, lu: start }];
+      let seed = id.length;
+      for (let t = start; t < end; t += 2700) {
+        const h = new Date(t * 1000).getHours();
+        seed = (seed * 9301 + 49297) % 233280;
+        const hot = (new Date(t * 1000).getDate() % 3) * 0.2 + 0.3;
+        if (h >= 9 && h <= 19 && seed / 233280 < hot && t + 600 < end) {
+          rows.push({ s: "cool", a: { hvac_action: "cooling" }, lu: t });
+          rows.push({ s: "cool", a: { hvac_action: "fan" }, lu: t + 600 });
+          rows.push({ s: "cool", a: { hvac_action: "idle" }, lu: t + 601 });
+        }
+      }
+      out[id] = rows;
+    }
+    return out;
+  };
   const layout = params.get("layout") ?? "full";
   for (const [label, z, ents, extra] of scenarios) {
     const wrap = document.createElement("div");
@@ -83,6 +106,7 @@
       locale: { language: "en", time_format: "12", time_zone: "server" },
       config: { time_zone: Intl.DateTimeFormat().resolvedOptions().timeZone },
       themes: { darkMode: dark },
+      callWS: async (msg) => (params.has("nohistory") ? Promise.reject(new Error("history not recorded")) : fakeHistory(msg)),
       callService: async (d, s, data) => {
         window.calls.push([d, s, data]);
         console.log("callService", d, s, JSON.stringify(data));

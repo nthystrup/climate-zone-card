@@ -56,6 +56,7 @@ export function resolveConfig(config: CardConfig, hass?: HomeAssistant): Resolve
     dialMin: config.dial_min ?? 60,
     dialMax: config.dial_max ?? 85,
     periodColors: config.period_colors ?? {},
+    showRuntime: config.show_runtime !== false,
   };
 }
 
@@ -142,6 +143,7 @@ export function cleanConfig(config: CardConfig, hass?: HomeAssistant): CardConfi
   keep("vacation_heat", config.vacation_heat, d.vacationHeat);
   keep("dial_min", config.dial_min, 60);
   keep("dial_max", config.dial_max, 85);
+  keep("show_runtime", config.show_runtime, true);
   if (config.period_colors) {
     const options: string[] = hass?.states[config.period ?? d.period]?.attributes?.options ?? [];
     const colors = Object.fromEntries(

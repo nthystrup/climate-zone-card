@@ -22,13 +22,15 @@ import {
 } from "./climate";
 import { computeStatus, fmtTemp, type Status } from "./status";
 import { formatMinutes, formatTime, nowMinutes, todayIndex } from "./format";
-import { DAY, buildWeek, nextChange, parseSchedule, weekDayPieces, type ParsedSchedule, type Week } from "./scheduler";
+import { DAY, DAY_SHORT, buildWeek, nextChange, parseSchedule, weekDayPieces, type ParsedSchedule, type Week } from "./scheduler";
 import { dialSvg } from "./dial";
+import { dailyRuntime, dayStarts, formatRuntime, sumDays, type DayRuntime } from "./runtime";
+import { ensureHistory, recordLive, runtimeEntry } from "./runtime-store";
 import "./schedule-dialog";
 import "./editor";
 import type { ClimateZoneScheduleDialog } from "./schedule-dialog";
 
-const VERSION = "0.4.0";
+const VERSION = "0.5.0";
 const SEND_DELAY_MS = 1500;
 const PENDING_TIMEOUT_MS = 10000;
 
@@ -65,6 +67,7 @@ export class ClimateZoneCard extends LitElement {
   @state() private _error?: string;
   @state() private _roomOpen = false;
   @state() private _tick = 0;
+  @state() private _runtimeRev = 0;
 
   @query("climate-zone-schedule-dialog") private _schedDialog?: ClimateZoneScheduleDialog;
   @query("dialog.room") private _roomDialog?: HTMLDialogElement;
@@ -138,6 +141,12 @@ export class ClimateZoneCard extends LitElement {
     }
     const dark = !!this.hass.themes?.darkMode;
     if (dark !== this.dark) this.dark = dark;
+
+    // Runtime stats: fold live hvac_action changes into the cache, top up history when stale.
+    if (this._cfg && this._cfg.layout === "full" && this._cfg.showRuntime && !zoneEntities(this._cfg, this.hass).missing.length) {
+      recordLive(this.hass, this._cfg.climate);
+      this._loadRuntime();
+    }
 
     // Drop the optimistic setpoint once HA reports it, or give up after a while.
     if (this._pending && this._sentAt && !this._sendTimer) {
@@ -518,6 +527,8 @@ export class ClimateZoneCard extends LitElement {
           ${m.scheduleError ? html`<div class="note">${m.scheduleError}</div>` : nothing}
         </div>
 
+        ${cfg.showRuntime ? this._renderRuntime(m) : nothing}
+
         ${this._error ? html`<div class="note err" role="alert">${this._error}</div>` : nothing}
 
         <footer class="foot">
@@ -541,6 +552,79 @@ export class ClimateZoneCard extends LitElement {
         ></climate-zone-schedule-dialog>
       </div>
     `;
+  }
+
+  private _runtimeLoading = false;
+
+  private _loadRuntime() {
+    if (this._runtimeLoading || !this.hass || !this._cfg) return;
+    const from = dayStarts(Date.now(), this.hass.config?.time_zone, 7)[0];
+    this._runtimeLoading = true;
+    ensureHistory(this.hass, this._cfg.climate, from).then((changed) => {
+      this._runtimeLoading = false;
+      if (changed) this._runtimeRev++;
+    });
+  }
+
+  private _renderRuntime(m: Model) {
+    void this._runtimeRev;
+    const ids = m.cfg.climate;
+    const entries = ids.map((id) => runtimeEntry(id));
+    const error = entries.find((e) => e?.error)?.error;
+    const ready = entries.every((e) => e && !e.loading && !e.error);
+    const now = Date.now();
+    const starts = dayStarts(now, this.hass?.config?.time_zone, 7);
+    const days: DayRuntime[] = ready
+      ? sumDays(entries.map((e) => dailyRuntime(e!.segs, starts, now)))
+      : starts.map((start) => ({ start, cooling: 0, heating: 0, cycles: 0 }));
+    const today = days[days.length - 1];
+    const total = (d: DayRuntime) => d.cooling + d.heating;
+    const week = days.reduce((a, d) => a + total(d), 0);
+    const scale = Math.max(3600000, ...days.map(total));
+    const linked = ids.length > 1;
+    const describe = (d: DayRuntime) => {
+      const parts = [
+        d.cooling ? `${formatRuntime(d.cooling)} cooling` : "",
+        d.heating ? `${formatRuntime(d.heating)} heating` : "",
+      ].filter(Boolean);
+      return parts.length ? parts.join(", ") : "no runtime";
+    };
+    const todayIdx = todayIndex(this.hass);
+    const dayName = (k: number) => DAY_SHORT[(todayIdx - (days.length - 1 - k) + 70) % 7];
+
+    let headline: unknown;
+    if (error) headline = html`<span class="rt-note">Unavailable: ${error}</span>`;
+    else if (!ready) headline = html`<span class="rt-note">Loading…</span>`;
+    else if (!total(today)) headline = html`<span>Not run today</span>`;
+    else
+      headline = html`<span>Today ${describe(today)} · ${today.cycles} cycle${today.cycles === 1 ? "" : "s"}</span>`;
+
+    return html`<section class="runtime" aria-labelledby="rt-title">
+      <div class="rt-head">
+        <span class="rt-title" id="rt-title">Runtime</span>
+        <span class="rt-today">${headline}</span>
+      </div>
+      ${error
+        ? nothing
+        : html`<div class="rt-bars" role="list" aria-label="Runtime per day, last 7 days">
+              ${days.map((d, k) => {
+                const isToday = k === days.length - 1;
+                const label = `${isToday ? "Today" : dayName(k)}: ${describe(d)}${d.cycles ? `, ${d.cycles} cycle${d.cycles === 1 ? "" : "s"}` : ""}`;
+                return html`<div class="rt-col" role="listitem" aria-label=${label} title=${label}>
+                  <div class="rt-bar">
+                    <span class="rt-heat" style="height:${(d.heating / scale) * 100}%"></span>
+                    <span class="rt-cool" style="height:${(d.cooling / scale) * 100}%"></span>
+                  </div>
+                  <span class="rt-day ${isToday ? "today" : ""}">${dayName(k).slice(0, 2)}</span>
+                </div>`;
+              })}
+            </div>
+            <div class="rt-foot">
+              ${ready
+                ? html`Last 7 days ${formatRuntime(week)} · ${formatRuntime(week / 7)} a day on average${linked ? html` · all ${ids.length} thermostats` : nothing}`
+                : html`&nbsp;`}
+            </div>`}
+    </section>`;
   }
 
   /** Whether −/+ can act, and whether the active setpoint is at a limit. Shared by both layouts. */
@@ -874,6 +958,74 @@ export class ClimateZoneCard extends LitElement {
       }
       .note.err {
         color: var(--error-color, #b3261e);
+      }
+      .runtime {
+        margin-top: 18px;
+        padding-top: 14px;
+        border-top: 1px solid var(--czc-divider);
+      }
+      .rt-head {
+        display: flex;
+        align-items: baseline;
+        justify-content: space-between;
+        gap: 12px;
+        flex-wrap: wrap;
+      }
+      .rt-title {
+        font-size: 12px;
+        font-weight: 600;
+        letter-spacing: 0.06em;
+        text-transform: uppercase;
+        color: var(--czc-text2);
+      }
+      .rt-today {
+        font-size: 13px;
+        font-weight: 600;
+      }
+      .rt-note {
+        font-weight: 400;
+        color: var(--czc-text2);
+      }
+      .rt-bars {
+        display: grid;
+        grid-template-columns: repeat(7, 1fr);
+        gap: 8px;
+        margin-top: 10px;
+      }
+      .rt-col {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        gap: 4px;
+      }
+      .rt-bar {
+        width: 100%;
+        max-width: 28px;
+        height: 48px;
+        border-radius: 4px;
+        background: var(--czc-track);
+        display: flex;
+        flex-direction: column-reverse;
+        overflow: hidden;
+      }
+      .rt-cool {
+        background: ${unsafeCSS(TONES.cool.fill)};
+      }
+      .rt-heat {
+        background: ${unsafeCSS(TONES.heat.fill)};
+      }
+      .rt-day {
+        font-size: 11px;
+        color: var(--czc-text2);
+      }
+      .rt-day.today {
+        color: var(--czc-text);
+        font-weight: 700;
+      }
+      .rt-foot {
+        font-size: 12px;
+        color: var(--czc-text2);
+        margin-top: 8px;
       }
       .foot {
         margin-top: 16px;

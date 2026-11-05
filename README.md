@@ -53,6 +53,7 @@ vacation_cool: input_number.vacation_cool_setpoint
 vacation_heat: input_number.vacation_heat_setpoint
 dial_min: 60
 dial_max: 85
+show_runtime: true           # runtime stats on the full card
 period_colors:                # optional, by period name
   Home: "#F2B45A"
   Sleep: "#3E4C9C"
@@ -92,6 +93,7 @@ If any required entity is missing the card shows an error listing the missing id
 - **Schedule dialog**: period setpoint steppers write immediately (debounced 1 s). Drag the handles on the day bar (or focus one and use the arrow keys) to move period boundaries in 15-minute steps, minimum 30 minutes per block. Save writes the times and waits for Scheduler to report them before closing; a failed save keeps your edits.
 - **Different times on different days**: pick *Every day*, *Weekdays + weekend* or *Each day*, choose a day group, and edit its bar. *Copy … to* copies the selected day's times to other days. A Scheduler entity holds one set of times for a list of days, so the card keeps one entity per distinct set of times: it reuses existing ones first, creates `switch.schedule_<zone>_2`, `_3`, … with `scheduler.add` when needed, and removes leftovers with `scheduler.remove`. The dialog says which entities a save will add or remove before you press Save. Existing `workday`/`weekend` schedules are read as Mon–Fri / Sat–Sun.
 - Periods change only when a slot starts, so the early hours of a day follow the previous day's last slot; the day strip and week preview show it that way.
+- **Runtime** (full card, `show_runtime: false` to hide): cooling and heating time today with the number of cycles, a bar per day for the last 7 days, and the 7-day total and daily average. It is computed from the thermostats' `hvac_action` history in the recorder (fetched once per page load over Home Assistant's history websocket, topped up every 15 minutes, and extended live), so it needs no extra entities. Linked zones add their thermostats together. Fan-only time after a cycle is not counted.
 - Times are shown in the Home Assistant server's time zone, because that is the clock Scheduler runs on.
 
 ## Development
