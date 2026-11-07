@@ -46,6 +46,7 @@ climate:                      # default: [climate.<zone>_thermostat]
 # overrides, all optional:
 period: input_select.east_bedroom_period
 override: input_boolean.east_bedroom_override
+hold_until: input_datetime.east_bedroom_hold_until  # optional minimum hold; used if it exists
 occupied: input_boolean.east_bedroom_occupied   # default: used if input_boolean.<zone>_occupied exists
 schedule: switch.schedule_east_bedroom          # optional; every Scheduler switch whose entities include the period helper is used
 vacation: input_boolean.vacation_mode
@@ -78,6 +79,7 @@ climate:
 | Period | `input_select.<zone>_period` (options = periods in order) | — |
 | Period setpoints | `input_number.<zone>_<period>_cool` / `_heat` | `input_number.set_value` (schedule dialog) |
 | Manual hold | `input_boolean.<zone>_override` | `input_boolean.turn_off` (Resume) |
+| Minimum hold (optional) | `input_datetime.<zone>_hold_until` | — |
 | Guests staying | `input_boolean.<zone>_occupied` (guest rooms only) | `input_boolean.toggle` |
 | Schedule | Scheduler `switch.schedule_*` whose `entities` include the period helper (one or more) | `scheduler.edit` / `add` / `remove` (schedule dialog Save) |
 | Vacation | `input_boolean.vacation_mode`, `input_number.vacation_cool_setpoint` / `_heat_setpoint` | — |
@@ -89,6 +91,7 @@ If any required entity is missing the card shows an error listing the missing id
 - **Status line**, first match wins: manual hold → vacation → guest room with no guests → current period.
 - **−/+** change the setpoint by `target_temp_step` (1° if absent), clamped to `min_temp`/`max_temp`. The number updates at once; one `climate.set_temperature` goes out 1.5 s after the last tap. In Heat/Cool, tap the low or high number to choose which end −/+ move.
 - A dial change is a manual hold by design: the controller turns the override on, not the card.
+- **Minimum hold** (optional): if `input_datetime.<zone>_hold_until` exists, the controller sets it to now + the minimum hold (60 min for East Bedroom) on every manual change, and a period change during that window waits until it passes. The card shows the real resume time ("Resumes 8:55 PM with Sleep"). Zones without the helper keep the old behaviour: the hold ends when the next period starts.
 - **Linked zones** show the mean indoor temperature and the first thermostat's setpoint; −/+ and the mode menu target all thermostats. If their setpoints or modes differ the dial reads "Out of sync".
 - **Schedule dialog**: period setpoint steppers write immediately (debounced 1 s). Drag the handles on the day bar (or focus one and use the arrow keys) to move period boundaries in 15-minute steps, minimum 30 minutes per block. Save writes the times and waits for Scheduler to report them before closing; a failed save keeps your edits.
 - **Different times on different days**: pick *Every day*, *Weekdays + weekend* or *Each day*, choose a day group, and edit its bar. *Copy … to* copies the selected day's times to other days. A Scheduler entity holds one set of times for a list of days, so the card keeps one entity per distinct set of times: it reuses existing ones first, creates `switch.schedule_<zone>_2`, `_3`, … with `scheduler.add` when needed, and removes leftovers with `scheduler.remove`. The dialog says which entities a save will add or remove before you press Save. Existing `workday`/`weekend` schedules are read as Mon–Fri / Sat–Sun.

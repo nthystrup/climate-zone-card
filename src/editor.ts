@@ -13,11 +13,12 @@ import {
 // Visual editor built from plain form controls: HA's own ha-* form elements
 // change between releases, so the card does not depend on them.
 
-type OverrideKey = "period" | "override" | "occupied" | "schedule" | "vacation" | "vacation_cool" | "vacation_heat";
+type OverrideKey = "period" | "override" | "hold_until" | "occupied" | "schedule" | "vacation" | "vacation_cool" | "vacation_heat";
 
 const OVERRIDES: { key: OverrideKey; label: string; domain: string }[] = [
   { key: "period", label: "Period helper", domain: "input_select" },
   { key: "override", label: "Manual hold helper", domain: "input_boolean" },
+  { key: "hold_until", label: "Minimum hold helper (optional)", domain: "input_datetime" },
   { key: "occupied", label: "Guests staying helper", domain: "input_boolean" },
   { key: "schedule", label: "Scheduler switch (extra)", domain: "switch" },
   { key: "vacation", label: "Vacation mode", domain: "input_boolean" },
@@ -236,7 +237,9 @@ export class ClimateZoneCardEditor extends LitElement {
             const placeholder =
               key === "schedule"
                 ? "found automatically"
-                : key === "occupied"
+                : key === "hold_until"
+                  ? resolved.holdUntil ?? `input_datetime.${cfg.zone}_hold_until (none: holds end with the period)`
+                  : key === "occupied"
                   ? resolved.occupied ?? `input_boolean.${cfg.zone}_occupied (not a guest room)`
                   : key === "period"
                     ? resolved.period
@@ -254,7 +257,7 @@ export class ClimateZoneCardEditor extends LitElement {
                 @change=${(e: Event) => this._set(key, (e.target as HTMLInputElement).value.trim())} />
             </label>`;
           })}
-          ${["input_select", "input_boolean", "input_number", "switch"].map(
+          ${["input_select", "input_boolean", "input_number", "input_datetime", "switch"].map(
             (d) => html`<datalist id="czc-${d}">${this._ids(d).map((id) => html`<option value=${id}></option>`)}</datalist>`,
           )}
         </details>

@@ -437,7 +437,9 @@ export class ClimateZoneScheduleDialog extends LitElement {
           ${this._error ? html`<div class="error" role="alert">${this._error}</div>` : nothing}
 
           <footer>
-            <p class="muted">Changes made at the thermostat hold until the next period starts.</p>
+            <p class="muted">${this.cfg.holdUntil
+              ? "Manual changes hold until the next period starts, and at least for the minimum hold time."
+              : "Changes made at the thermostat hold until the next period starts."}</p>
             <div class="actions">
               <button class="ghost-btn" @click=${this._cancel} ?disabled=${this._saving}>Cancel</button>
               <button class="dark-btn" @click=${this._save} ?disabled=${!dirty || this._saving || !editable}

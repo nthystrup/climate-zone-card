@@ -21,6 +21,10 @@ export interface ZoneSnapshot {
   nextTrigger?: Date;
   vacationCool?: number;
   vacationHeat?: number;
+  /** End of the minimum hold (input_datetime), if the zone has one and it is in the future. */
+  holdUntil?: Date;
+  /** Period that started during the minimum hold and takes over when it ends. */
+  deferredPeriod?: string;
   /** The next period's setpoint helpers. */
   nextSetpoints?: { cool?: number; heat?: number };
 }
@@ -62,7 +66,18 @@ export function targetPhrase(mode: string, cool?: number, heat?: number): string
 export function computeStatus(z: ZoneSnapshot, fmtTime: (d: Date) => string): Status {
   if (z.override) {
     const held = setpointText(z.mode, z.setpoint);
-    const when = z.nextTrigger ? fmtTime(z.nextTrigger) : undefined;
+    if (z.deferredPeriod && z.holdUntil) {
+      return {
+        kind: "hold",
+        title: held ? `Held at ${held}` : "Manual hold",
+        detail: `Resumes ${fmtTime(z.holdUntil)} with ${z.deferredPeriod}`,
+        setback: false,
+      };
+    }
+    // The hold lasts until the next period starts, but never ends before holdUntil.
+    const end =
+      z.holdUntil && (!z.nextTrigger || z.holdUntil > z.nextTrigger) ? z.holdUntil : z.nextTrigger;
+    const when = end ? fmtTime(end) : undefined;
     let detail: string;
     if (when && z.nextPeriod) detail = `Resumes ${when} with ${z.nextPeriod}`;
     else if (when) detail = `Resumes ${when}`;

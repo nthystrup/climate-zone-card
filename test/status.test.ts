@@ -43,6 +43,26 @@ describe("computeStatus priority", () => {
     expect(computeStatus({ ...base, mode: "heat_cool" }, fmt).detail).toBe("Next: Sleep, heat to 64° / cool to 74°");
     expect(computeStatus({ ...base, mode: "off" }, fmt).detail).toBe("Next: Sleep, 74° cool / 64° heat");
   });
+  it("minimum hold pushes the resume time past the next period start", () => {
+    const fmtD = (d: Date) => d.toISOString().slice(11, 16);
+    const s = computeStatus(
+      { ...base, override: true, nextTrigger: new Date("2026-11-03T20:00:00Z"), holdUntil: new Date("2026-11-03T20:55:00Z") },
+      fmtD,
+    );
+    expect(s.detail).toBe("Resumes 20:55 with Sleep");
+    const later = computeStatus(
+      { ...base, override: true, nextTrigger: new Date("2026-11-03T20:00:00Z"), holdUntil: new Date("2026-11-03T19:30:00Z") },
+      fmtD,
+    );
+    expect(later.detail).toBe("Resumes 20:00 with Sleep");
+  });
+  it("a period that started during the minimum hold takes over when it ends", () => {
+    const s = computeStatus(
+      { ...base, override: true, period: "Sleep", nextPeriod: "Home", deferredPeriod: "Sleep", holdUntil: new Date("2026-11-03T20:55:00Z") },
+      (d) => d.toISOString().slice(11, 16),
+    );
+    expect(s.detail).toBe("Resumes 20:55 with Sleep");
+  });
   it("hold in heat_cool shows the range", () => {
     const s = computeStatus({ ...base, mode: "heat_cool", override: true, setpoint: { low: 66, high: 77 } }, fmt);
     expect(s.title).toBe("Held at 66–77°");

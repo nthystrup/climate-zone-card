@@ -42,6 +42,7 @@ export interface CardConfig {
   climate?: string | string[];
   period?: string;
   override?: string;
+  hold_until?: string;
   occupied?: string;
   schedule?: string;
   vacation?: string;
@@ -62,6 +63,8 @@ export interface ResolvedConfig {
   climate: string[];
   period: string;
   override: string;
+  /** Minimum-hold helper (input_datetime); undefined = the zone has none. */
+  holdUntil?: string;
   /** undefined = not a guest room (always treated as occupied). */
   occupied?: string;
   /** Explicitly configured schedule entity, if any. */

@@ -30,7 +30,7 @@ import "./schedule-dialog";
 import "./editor";
 import type { ClimateZoneScheduleDialog } from "./schedule-dialog";
 
-const VERSION = "0.5.0";
+const VERSION = "0.6.0";
 const SEND_DELAY_MS = 1500;
 const PENDING_TIMEOUT_MS = 10000;
 
@@ -196,6 +196,14 @@ export class ClimateZoneCard extends LitElement {
     const vacation = st[cfg.vacation].state === "on";
     const occupied = cfg.occupied ? st[cfg.occupied].state === "on" : true;
     const nextSp = next.period ? setpointEntities(cfg, next.period) : undefined;
+    // Minimum hold: only meaningful while the hold is on and the time is still ahead.
+    const holdTs = cfg.holdUntil ? Number(st[cfg.holdUntil]?.attributes?.timestamp) * 1000 : NaN;
+    const holdUntil = override && holdTs > Date.now() ? new Date(holdTs) : undefined;
+    // A period that started after the hold began is waiting for the hold to end
+    // (same 10 s margin as the controller, which also guards against restart restores).
+    const periodChanged = Date.parse(st[cfg.period].last_changed ?? "");
+    const holdStarted = Date.parse(st[cfg.override].last_changed ?? "");
+    const deferredPeriod = holdUntil && periodChanged > holdStarted + 10000 ? period : undefined;
     const sp = this._pending ?? {};
 
     const status = computeStatus(
@@ -213,6 +221,8 @@ export class ClimateZoneCard extends LitElement {
         period,
         nextPeriod: next.period,
         nextTrigger: next.at,
+        holdUntil,
+        deferredPeriod,
         vacationCool: num(st[cfg.vacationCool]?.state),
         vacationHeat: num(st[cfg.vacationHeat]?.state),
         nextSetpoints: nextSp ? { cool: num(st[nextSp.cool]?.state), heat: num(st[nextSp.heat]?.state) } : undefined,

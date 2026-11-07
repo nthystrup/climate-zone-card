@@ -40,6 +40,9 @@ export function resolveConfig(config: CardConfig, hass?: HomeAssistant): Resolve
   const occupiedDefault = `input_boolean.${z}_occupied`;
   const occupied =
     config.occupied ?? (hass && hass.states[occupiedDefault] ? occupiedDefault : undefined);
+  const holdDefault = `input_datetime.${z}_hold_until`;
+  const holdUntil =
+    config.hold_until ?? (hass && hass.states[holdDefault] ? holdDefault : undefined);
   return {
     zone: z,
     name: config.name ?? titleCase(z),
@@ -48,6 +51,7 @@ export function resolveConfig(config: CardConfig, hass?: HomeAssistant): Resolve
     climate,
     period: config.period ?? `input_select.${z}_period`,
     override: config.override ?? `input_boolean.${z}_override`,
+    holdUntil,
     occupied,
     schedule: config.schedule,
     vacation: config.vacation ?? "input_boolean.vacation_mode",
@@ -88,6 +92,7 @@ export function zoneEntities(cfg: ResolvedConfig, hass: HomeAssistant): ZoneEnti
     cfg.vacationHeat,
   ];
   if (cfg.occupied) required.push(cfg.occupied);
+  if (cfg.holdUntil) required.push(cfg.holdUntil);
 
   const options: string[] = st[cfg.period]?.attributes?.options ?? [];
   for (const p of options) {
@@ -136,6 +141,7 @@ export function cleanConfig(config: CardConfig, hass?: HomeAssistant): CardConfi
   if (climate && climate.length) keep("climate", climate, d.climate);
   keep("period", config.period, d.period);
   keep("override", config.override, d.override);
+  keep("hold_until", config.hold_until, d.holdUntil);
   keep("occupied", config.occupied, d.occupied);
   keep("schedule", config.schedule);
   keep("vacation", config.vacation, d.vacation);
