@@ -30,7 +30,7 @@ import "./schedule-dialog";
 import "./editor";
 import type { ClimateZoneScheduleDialog } from "./schedule-dialog";
 
-const VERSION = "0.6.0";
+const VERSION = "0.6.1";
 const SEND_DELAY_MS = 1500;
 const PENDING_TIMEOUT_MS = 10000;
 
@@ -667,7 +667,7 @@ export class ClimateZoneCard extends LitElement {
           <button class="c-open" aria-haspopup="dialog" @click=${this._openRoom}>
             <span class="c-name">${cfg.name}${m.thermostats.length > 1 ? html` <span class="link">${icon("link", 16)}</span>` : nothing}</span>
             <span class="c-status toned" style=${toneVars(m.tone)}>
-              <span class="dot"></span><span class="c-st">${!m.synced ? "Out of sync" : m.status.title}</span>
+              <span class="dot"></span><span class="c-st">${!m.synced ? "Out of sync" : m.status.short}</span>
             </span>
             <span class="sr-only">Open room</span>
           </button>

@@ -1,0 +1,16 @@
+<!doctype html>
+<html><head><meta charset="utf-8" /><title>Live replay</title>
+<style>body{margin:0;padding:16px;font-family:system-ui;background:#f4f5f7;--primary-text-color:#1c1c1c;--secondary-text-color:#646a73;--divider-color:rgba(0,0,0,.12);--ha-card-background:#fff}#c{width:400px}</style></head>
+<body><div id="c"></div>
+<script type="module">
+  await import("../dist/climate-zone-card.js");
+  const states = await (await fetch("./live-states.json")).json();
+  const hass = { states, locale: { language: "en", time_format: "12" }, config: { time_zone: "America/Phoenix" },
+    themes: { darkMode: false }, callService: async () => {}, callWS: async () => ({}) };
+  for (const layout of ["full", "compact"]) {
+    const card = document.createElement("climate-zone-card");
+    card.setConfig({ type: "custom:climate-zone-card", zone: "east_bedroom", layout });
+    card.hass = hass;
+    document.getElementById("c").append(card);
+  }
+</script></body></html>

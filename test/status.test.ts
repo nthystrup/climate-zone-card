@@ -50,6 +50,7 @@ describe("computeStatus priority", () => {
       fmtD,
     );
     expect(s.detail).toBe("Resumes 20:55 with Sleep");
+    expect(s.short).toBe("Held at 76° until 20:55");
     const later = computeStatus(
       { ...base, override: true, nextTrigger: new Date("2026-11-03T20:00:00Z"), holdUntil: new Date("2026-11-03T19:30:00Z") },
       fmtD,
@@ -62,6 +63,7 @@ describe("computeStatus priority", () => {
       (d) => d.toISOString().slice(11, 16),
     );
     expect(s.detail).toBe("Resumes 20:55 with Sleep");
+    expect(s.short).toBe("Held at 76° until 20:55, then Sleep");
   });
   it("hold in heat_cool shows the range", () => {
     const s = computeStatus({ ...base, mode: "heat_cool", override: true, setpoint: { low: 66, high: 77 } }, fmt);

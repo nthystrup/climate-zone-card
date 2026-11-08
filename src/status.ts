@@ -35,6 +35,8 @@ export interface Status {
   detail: string;
   /** Hatched day strip instead of period segments. */
   setback: boolean;
+  /** One-line version for the compact row. */
+  short: string;
 }
 
 export const fmtTemp = (n: number | undefined): string =>
@@ -66,12 +68,15 @@ export function targetPhrase(mode: string, cool?: number, heat?: number): string
 export function computeStatus(z: ZoneSnapshot, fmtTime: (d: Date) => string): Status {
   if (z.override) {
     const held = setpointText(z.mode, z.setpoint);
+    const title = held ? `Held at ${held}` : "Manual hold";
     if (z.deferredPeriod && z.holdUntil) {
+      const t = fmtTime(z.holdUntil);
       return {
         kind: "hold",
-        title: held ? `Held at ${held}` : "Manual hold",
-        detail: `Resumes ${fmtTime(z.holdUntil)} with ${z.deferredPeriod}`,
+        title,
+        detail: `Resumes ${t} with ${z.deferredPeriod}`,
         setback: false,
+        short: `${title} until ${t}, then ${z.deferredPeriod}`,
       };
     }
     // The hold lasts until the next period starts, but never ends before holdUntil.
@@ -82,7 +87,7 @@ export function computeStatus(z: ZoneSnapshot, fmtTime: (d: Date) => string): St
     if (when && z.nextPeriod) detail = `Resumes ${when} with ${z.nextPeriod}`;
     else if (when) detail = `Resumes ${when}`;
     else detail = "Resumes when the next period starts";
-    return { kind: "hold", title: held ? `Held at ${held}` : "Manual hold", detail, setback: false };
+    return { kind: "hold", title, detail, setback: false, short: when ? `${title} until ${when}` : title };
   }
   if (z.vacation) {
     return {
@@ -90,6 +95,7 @@ export function computeStatus(z: ZoneSnapshot, fmtTime: (d: Date) => string): St
       title: "Vacation mode is on",
       detail: `Every room holds ${fmtTemp(z.vacationCool)}° / ${fmtTemp(z.vacationHeat)}°`,
       setback: true,
+      short: "Vacation mode is on",
     };
   }
   if (z.guestRoom && !z.occupied) {
@@ -98,6 +104,7 @@ export function computeStatus(z: ZoneSnapshot, fmtTime: (d: Date) => string): St
       title: "No guests staying",
       detail: `Holds ${fmtTemp(z.vacationCool)}° cool / ${fmtTemp(z.vacationHeat)}° heat`,
       setback: true,
+      short: "No guests staying",
     };
   }
   const period = z.period ?? "Schedule";
@@ -107,5 +114,5 @@ export function computeStatus(z: ZoneSnapshot, fmtTime: (d: Date) => string): St
     const sp = z.nextSetpoints ?? {};
     detail = `Next: ${z.nextPeriod}, ${targetPhrase(z.mode, sp.cool, sp.heat)}`;
   }
-  return { kind: "period", title, detail, setback: false };
+  return { kind: "period", title, detail, setback: false, short: title };
 }
