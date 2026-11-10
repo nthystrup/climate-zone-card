@@ -265,3 +265,41 @@ describe("master bedroom style weeks (midnight start, single-slot days)", () => 
     expect((ops[0] as any).payload.timeslots[0]).toMatchObject({ start: "00:00", stop: "06:15" });
   });
 });
+
+describe("block editing", () => {
+  it("splits an all-day block in the middle", async () => {
+    const { splitBlock } = await import("../src/scheduler");
+    expect(splitBlock({ starts: [0], periods: ["Sleep"] }, 0, "Home")).toEqual({ starts: [0, 720], periods: ["Sleep", "Home"] });
+  });
+  it("splits a block that wraps midnight and keeps cyclic order", async () => {
+    const { splitBlock, planToBlocks } = await import("../src/scheduler");
+    // Sleep 20:00-07:00 (11 h) → split at 01:30
+    const p = splitBlock({ starts: [420, 1200], periods: ["Home", "Sleep"] }, 1, "Away");
+    expect(p).toEqual({ starts: [420, 1200, 90], periods: ["Home", "Sleep", "Away"] });
+    expect(planToBlocks(p).map((b) => [b.start, b.stop, b.period])).toEqual([[420, 1200, "Home"], [1200, 90, "Sleep"], [90, 420, "Away"]]);
+  });
+  it("won't split a block shorter than two minimum blocks", async () => {
+    const { splitBlock } = await import("../src/scheduler");
+    const p = { starts: [360, 410, 480], periods: ["Home", "Away", "Sleep"] };
+    expect(splitBlock(p, 0, "Sleep")).toBe(p);
+  });
+  it("changes a block's period and removes blocks", async () => {
+    const { setBlockPeriod, removeBlock } = await import("../src/scheduler");
+    const p = { starts: [0, 360, 480, 1020], periods: ["Sleep", "Home", "Away", "Sleep"] };
+    expect(setBlockPeriod(p, 2, "Home").periods).toEqual(["Sleep", "Home", "Home", "Sleep"]);
+    expect(removeBlock(p, 2)).toEqual({ starts: [0, 360, 1020], periods: ["Sleep", "Home", "Sleep"] });
+    expect(removeBlock({ starts: [0], periods: ["Sleep"] }, 0)).toEqual({ starts: [0], periods: ["Sleep"] });
+  });
+  it("Saturday: all Sleep → Sleep then Home from 8:00 saves as two slots", async () => {
+    const { splitBlock, buildEditPayload } = await import("../src/scheduler");
+    let p = splitBlock({ starts: [0], periods: ["Sleep"] }, 0, "Home");
+    p = moveBoundary(p, 1, 480);
+    expect(buildEditPayload("switch.m2", P, p, ["sat"]).timeslots.map((t) => `${t.start}-${t.stop} ${t.actions[0].service_data.option}`))
+      .toEqual(["00:00-08:00 Sleep", "08:00-00:00 Home"]);
+  });
+  it("suggests the next period option", async () => {
+    const { suggestPeriod } = await import("../src/scheduler");
+    expect(suggestPeriod(["Home", "Sleep", "Away"], "Sleep")).toBe("Away");
+    expect(suggestPeriod(["Home", "Sleep", "Away"], "Away")).toBe("Home");
+  });
+});

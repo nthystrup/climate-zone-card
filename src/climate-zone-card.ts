@@ -30,7 +30,7 @@ import "./schedule-dialog";
 import "./editor";
 import type { ClimateZoneScheduleDialog } from "./schedule-dialog";
 
-const VERSION = "0.6.2";
+const VERSION = "0.7.0";
 const SEND_DELAY_MS = 1500;
 const PENDING_TIMEOUT_MS = 10000;
 

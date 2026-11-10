@@ -12,6 +12,12 @@ import {
   SNAP_MINUTES,
   buildWeek,
   copyGroupPlan,
+  blockLength,
+  removeBlock,
+  setBlockPeriod,
+  splitBlock,
+  suggestPeriod,
+  MIN_BLOCK_MINUTES,
   dayPieces,
   daysLabel,
   detectMode,
@@ -53,6 +59,8 @@ export class ClimateZoneScheduleDialog extends LitElement {
   @state() private _sel = 0;
   @state() private _copyTo: number[] = [];
   @state() private _copyOpen = false;
+  /** Selected block (index into the current group's plan) for period/split/remove. */
+  @state() private _block?: number;
   @state() private _drag?: number;
   @state() private _focusHandle?: number;
   @state() private _saving = false;
@@ -139,6 +147,7 @@ export class ClimateZoneScheduleDialog extends LitElement {
   }
 
   protected willUpdate(changed: PropertyValues) {
+    if (changed.has("_sel") || changed.has("_mode")) this._block = undefined;
     if (!changed.has("hass") || !this.hass) return;
     // Drop optimistic setpoint values once HA reports them.
     const next = { ...this._sp };
@@ -393,8 +402,11 @@ export class ClimateZoneScheduleDialog extends LitElement {
             ${plan
               ? this._renderDayBar(plan, color, editable)
               : html`<p class="muted">No schedule to edit.</p>`}
+            ${editable && plan && this._block !== undefined && this._block < plan.starts.length
+              ? this._renderBlockEditor(plan, this._block, options, color)
+              : nothing}
             ${editable && this._groups.length > 1 ? this._renderCopy() : nothing}
-            ${editable ? html`<p class="muted hint">Drag a handle (or focus it and use the arrow keys) to move a change in 15-minute steps.</p>` : nothing}
+            ${editable ? html`<p class="muted hint">Tap a block to change its period, split it or remove it. Drag a handle (or focus it and use the arrow keys) to move a change in 15-minute steps.</p>` : nothing}
           </section>
 
           <section aria-labelledby="sd-week">
@@ -455,6 +467,43 @@ export class ClimateZoneScheduleDialog extends LitElement {
 
   private _idList(ids: string[]) {
     return ids.map((id, i) => html`${i ? ", " : ""}<code>${id}</code>`);
+  }
+
+  private _renderBlockEditor(plan: DayPlan, i: number, options: string[], color: (p: string) => string) {
+    const n = plan.starts.length;
+    const period = plan.periods[i];
+    const start = plan.starts[i];
+    const end = n === 1 ? start : plan.starts[(i + 1) % n];
+    const canSplit = blockLength(plan, i) >= 2 * MIN_BLOCK_MINUTES;
+    const range = n === 1 ? "all day" : `${formatMinutes(start, this.hass)} – ${formatMinutes(end, this.hass)}`;
+    return html`<div class="blk-edit" role="group" aria-label="Edit ${period} block">
+      <div class="blk-head">
+        <span class="swatch" style="background:${color(period)}"></span>
+        <strong>${period}</strong><span class="muted">${range}</span>
+        <button class="link" @click=${() => (this._block = undefined)}>Done</button>
+      </div>
+      <div class="chips" role="radiogroup" aria-label="Period for this block">
+        ${options.map(
+          (p) => html`<button class="chip" role="radio" aria-checked=${p === period ? "true" : "false"}
+            @click=${() => this._setPlan(setBlockPeriod(plan, i, p))}>
+            <span class="swatch sm" style="background:${color(p)}"></span>${p}</button>`,
+        )}
+      </div>
+      <div class="blk-actions">
+        <button class="ghost-btn sm" ?disabled=${!canSplit}
+          title=${canSplit ? "" : `Blocks need at least ${MIN_BLOCK_MINUTES} minutes on each side`}
+          @click=${() => {
+            this._setPlan(splitBlock(plan, i, suggestPeriod(options, period)));
+            this._block = i + 1;
+          }}>Split in two</button>
+        <button class="ghost-btn sm" ?disabled=${n < 2}
+          title=${n < 2 ? "A day needs at least one block" : ""}
+          @click=${() => {
+            this._setPlan(removeBlock(plan, i));
+            this._block = undefined;
+          }}>Remove</button>
+      </div>
+    </div>`;
   }
 
   private _renderCopy() {
@@ -541,7 +590,24 @@ export class ClimateZoneScheduleDialog extends LitElement {
         <div class="daybar">
           ${pieces.map((pc, idx) => {
             const label = longest.get(pc.block) === idx;
-            return html`<div class="block" style=${this._segStyle(pc.start, pc.end, color(pc.period))}>
+            const sel = editable && this._block === pc.block;
+            return html`<div
+              class="block ${editable ? "pick" : ""} ${sel ? "sel" : ""}"
+              style=${this._segStyle(pc.start, pc.end, color(pc.period))}
+              role=${editable ? "button" : nothing}
+              tabindex=${editable && label ? "0" : nothing}
+              aria-pressed=${editable ? (sel ? "true" : "false") : nothing}
+              aria-label=${editable ? `${pc.period} block, ${formatMinutes(plan.starts[pc.block], this.hass)}. Edit` : nothing}
+              @click=${editable ? () => (this._block = sel ? undefined : pc.block) : null}
+              @keydown=${editable
+                ? (e: KeyboardEvent) => {
+                    if (e.key === "Enter" || e.key === " ") {
+                      e.preventDefault();
+                      this._block = sel ? undefined : pc.block;
+                    }
+                  }
+                : null}
+            >
               ${label
                 ? html`<span class="bl-name">${pc.period}</span><span class="bl-sp">${sp(pc.period)}</span>`
                 : nothing}
@@ -714,6 +780,49 @@ export class ClimateZoneScheduleDialog extends LitElement {
       }
       .readonly .daybar {
         opacity: 0.85;
+      }
+      .block.pick {
+        cursor: pointer;
+      }
+      .block.pick:hover {
+        filter: brightness(1.08);
+      }
+      .block.sel {
+        box-shadow: inset 0 0 0 3px var(--czc-text);
+      }
+      .block:focus-visible {
+        outline: 2px solid var(--primary-color, #1f6fd1);
+        outline-offset: 2px;
+      }
+      .blk-edit {
+        margin-top: 10px;
+        border: 1px solid var(--czc-divider);
+        border-radius: 12px;
+        padding: 10px 12px;
+        display: grid;
+        gap: 8px;
+      }
+      .blk-head {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        font-size: 14px;
+      }
+      .blk-head .link {
+        margin-left: auto;
+        min-height: 36px;
+        padding: 0 8px;
+        font-weight: 600;
+        color: var(--primary-color, #1f6fd1);
+      }
+      .swatch.sm {
+        width: 10px;
+        height: 10px;
+        border-radius: 3px;
+      }
+      .blk-actions {
+        display: flex;
+        gap: 8px;
       }
       .block {
         position: absolute;

@@ -8,7 +8,7 @@
   const states = await (await fetch("./" + (q.get("states") || "live-states.json"))).json();
   const extra = q.get("climate") ? { climate: [q.get("climate")], name: q.get("name") } : {};
   const hass = { states, locale: { language: "en", time_format: "12" }, config: { time_zone: "America/Phoenix" },
-    themes: { darkMode: false }, callService: async () => {}, callWS: async () => ({}) };
+    themes: { darkMode: false }, callService: async (d, s, data) => { (window.calls ||= []).push([d, s, data]); }, callWS: async () => ({}) };
   for (const layout of ["full", "compact"]) {
     const card = document.createElement("climate-zone-card");
     card.setConfig({ type: "custom:climate-zone-card", zone: q.get("zone") || "east_bedroom", layout, ...extra });

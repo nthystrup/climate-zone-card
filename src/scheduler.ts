@@ -603,3 +603,47 @@ export function copyGroupPlan(groups: DayGroup[], from: number, to: number[]): D
     i !== from && to.includes(i) ? { days: g.days, plan: { starts: [...src.starts], periods: [...src.periods] } } : g,
   );
 }
+
+// ---------------------------------------------------------------- block editing
+// Plans stay in cyclic order: a new block goes right after the one it splits.
+
+/** Split block i at its middle (on the snap grid); the new second half gets `period`. */
+export function splitBlock(plan: DayPlan, i: number, period: string): DayPlan {
+  const len = blockLength(plan, i);
+  if (len < 2 * MIN_BLOCK_MINUTES) return plan;
+  const start = plan.starts[i];
+  let mid = snapMinutes(start + len / 2);
+  // Keep both halves at least the minimum length after snapping.
+  const off = (((mid - start) % DAY) + DAY) % DAY;
+  if (off < MIN_BLOCK_MINUTES) mid = (start + MIN_BLOCK_MINUTES) % DAY;
+  else if (len - off < MIN_BLOCK_MINUTES) mid = (start + len - MIN_BLOCK_MINUTES) % DAY;
+  const starts = [...plan.starts];
+  const periods = [...plan.periods];
+  starts.splice(i + 1, 0, mid);
+  periods.splice(i + 1, 0, period);
+  return { starts, periods };
+}
+
+export function setBlockPeriod(plan: DayPlan, i: number, period: string): DayPlan {
+  if (plan.periods[i] === period) return plan;
+  const periods = [...plan.periods];
+  periods[i] = period;
+  return { starts: plan.starts, periods };
+}
+
+/** Remove block i; the block before it (cyclically) grows to cover its time. */
+export function removeBlock(plan: DayPlan, i: number): DayPlan {
+  if (plan.starts.length < 2) return plan;
+  const starts = [...plan.starts];
+  const periods = [...plan.periods];
+  starts.splice(i, 1);
+  periods.splice(i, 1);
+  return { starts, periods };
+}
+
+/** Period to suggest for the new half of a split: the next option after the block's own. */
+export function suggestPeriod(options: string[], current: string): string {
+  if (options.length < 2) return current;
+  const i = options.indexOf(current);
+  return options[(i + 1) % options.length];
+}
