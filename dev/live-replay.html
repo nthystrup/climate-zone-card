@@ -4,12 +4,14 @@
 <body><div id="c"></div>
 <script type="module">
   await import("../dist/climate-zone-card.js");
-  const states = await (await fetch("./live-states.json")).json();
+  const q = new URLSearchParams(location.search);
+  const states = await (await fetch("./" + (q.get("states") || "live-states.json"))).json();
+  const extra = q.get("climate") ? { climate: [q.get("climate")], name: q.get("name") } : {};
   const hass = { states, locale: { language: "en", time_format: "12" }, config: { time_zone: "America/Phoenix" },
     themes: { darkMode: false }, callService: async () => {}, callWS: async () => ({}) };
   for (const layout of ["full", "compact"]) {
     const card = document.createElement("climate-zone-card");
-    card.setConfig({ type: "custom:climate-zone-card", zone: "east_bedroom", layout });
+    card.setConfig({ type: "custom:climate-zone-card", zone: q.get("zone") || "east_bedroom", layout, ...extra });
     card.hass = hass;
     document.getElementById("c").append(card);
   }

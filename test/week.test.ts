@@ -214,3 +214,54 @@ describe("copyGroupPlan", () => {
     expect(out[0].plan.starts[0]).toBe(390); // independent copies
   });
 });
+
+describe("master bedroom style weeks (midnight start, single-slot days)", () => {
+  // Mon–Fri: Sleep 00:00, Home 06:00, Away 08:00, Sleep 17:00; Sat Sleep all day; Sun Home all day.
+  const wk: DayPlan = { starts: [0, 360, 480, 1020], periods: ["Sleep", "Home", "Away", "Sleep"] };
+  const week = groupsToWeek([
+    { days: [0, 1, 2, 3, 4], plan: wk },
+    { days: [5], plan: { starts: [0], periods: ["Sleep"] } },
+    { days: [6], plan: { starts: [0], periods: ["Home"] } },
+  ]);
+  it("Monday early morning is Sleep, not Sunday's Home", () => {
+    expect(periodAtWeek(week, 0, 120)).toBe("Sleep");
+    expect(periodAtWeek(week, 6, 120)).toBe("Home");
+  });
+  it("finds the next real change, skipping a midnight slot that re-selects the period", async () => {
+    const { nextPeriodChange } = await import("../src/scheduler");
+    // Monday 20:58 → next change is Tuesday 06:00 Home (Tuesday 00:00 Sleep is not a change)
+    expect(nextPeriodChange(week, 0, 20 * 60 + 58)).toEqual({ period: "Home", dayOffset: 1, minute: 360 });
+    // Friday 21:00 → Saturday stays Sleep → Sunday 00:00 Home
+    expect(nextPeriodChange(week, 4, 21 * 60)).toEqual({ period: "Home", dayOffset: 2, minute: 0 });
+    // Sunday 10:00 → Monday 00:00 Sleep
+    expect(nextPeriodChange(week, 6, 600)).toEqual({ period: "Sleep", dayOffset: 1, minute: 0 });
+  });
+  it("saving a weekday group keeps the midnight slot; an every-day plan still merges it", async () => {
+    const { buildEditPayload } = await import("../src/scheduler");
+    const wd = buildEditPayload("switch.s", P, moveBoundary(wk, 1, 375), ["mon", "tue", "wed", "thu", "fri"]);
+    expect(wd.timeslots.map((t) => `${t.start}-${t.stop}`)).toEqual(["00:00-06:15", "06:15-08:00", "08:00-17:00", "17:00-00:00"]);
+    const daily = buildEditPayload("switch.s", P, wk, ["daily"]);
+    expect(daily.timeslots.map((t) => `${t.start}-${t.stop}`)).toEqual(["06:00-08:00", "08:00-17:00", "17:00-06:00"]);
+  });
+  it("a single all-day slot is written as 00:00 - 23:59", async () => {
+    const { buildEditPayload } = await import("../src/scheduler");
+    expect(buildEditPayload("switch.s", P, { starts: [0], periods: ["Sleep"] }, ["sat"]).timeslots.map((t) => `${t.start}-${t.stop}`)).toEqual(["00:00-23:59"]);
+  });
+  it("editing Mon–Fri touches only that schedule and keeps its weekdays", () => {
+    const sources = buildWeek([
+      parseSchedule({ entity_id: "switch.m", state: "on", attributes: { weekdays: ["mon", "tue", "wed", "thu", "fri"], timeslots: ["00:00 - 06:00", "06:00 - 08:00", "08:00 - 17:00", "17:00 - 00:00"], entities: [P], actions: ["Sleep", "Home", "Away", "Sleep"].map((o) => ({ service: "input_select.select_option", data: { option: o } })) } }),
+      parseSchedule({ entity_id: "switch.m2", state: "on", attributes: { weekdays: ["sat"], timeslots: ["00:00 - 23:59"], entities: [P], actions: [{ service: "input_select.select_option", data: { option: "Sleep" } }] } }),
+      parseSchedule({ entity_id: "switch.m3", state: "on", attributes: { weekdays: ["sun"], timeslots: ["00:00 - 23:59"], entities: [P], actions: [{ service: "input_select.select_option", data: { option: "Home" } }] } }),
+    ]);
+    expect(weekEquals(sources.days, week)).toBe(true);
+    expect(planWeekSave(sources.sources, week, P, "Master Bedroom", new Set())).toEqual([]);
+    const edited = groupsToWeek([
+      { days: [0, 1, 2, 3, 4], plan: moveBoundary(wk, 1, 375) },
+      { days: [5], plan: { starts: [0], periods: ["Sleep"] } },
+      { days: [6], plan: { starts: [0], periods: ["Home"] } },
+    ]);
+    const ops = planWeekSave(sources.sources, edited, P, "Master Bedroom", new Set());
+    expect(ops.map((o) => [o.kind, o.entityId])).toEqual([["edit", "switch.m"]]);
+    expect((ops[0] as any).payload.timeslots[0]).toMatchObject({ start: "00:00", stop: "06:15" });
+  });
+});

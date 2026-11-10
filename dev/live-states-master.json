@@ -1,0 +1,18 @@
+{
+"climate.master_bedroom":{"entity_id":"climate.master_bedroom","state":"cool","attributes":{"hvac_modes":["off","heat","cool","heat_cool"],"min_temp":45,"max_temp":92,"current_temperature":75,"temperature":74,"target_temp_high":null,"target_temp_low":null,"current_humidity":46,"hvac_action":"cooling","friendly_name":"Master Bedroom Thermostat"},"last_changed":"2026-11-09T06:34:26.949360-07:00","last_updated":"2026-11-09T20:58:35.832199-07:00"},
+"input_select.master_bedroom_period":{"entity_id":"input_select.master_bedroom_period","state":"Sleep","attributes":{"options":["Home","Sleep","Away"]},"last_changed":"2026-11-09T20:58:23.976491-07:00"},
+"input_boolean.master_bedroom_override":{"entity_id":"input_boolean.master_bedroom_override","state":"off","attributes":{},"last_changed":"2026-11-09T20:56:45.930427-07:00"},
+"input_datetime.master_bedroom_hold_until":{"entity_id":"input_datetime.master_bedroom_hold_until","state":"2026-11-09 00:00:00","attributes":{"has_date":true,"has_time":true,"timestamp":1794207600}},
+"switch.schedule_master_bedroom":{"entity_id":"switch.schedule_master_bedroom","state":"on","attributes":{"weekdays":["mon","tue","wed","thu","fri"],"timeslots":["00:00 - 06:00","06:00 - 08:00","08:00 - 17:00","17:00 - 00:00"],"entities":["input_select.master_bedroom_period"],"actions":[{"service":"input_select.select_option","data":{"option":"Sleep"}},{"service":"input_select.select_option","data":{"option":"Home"}},{"service":"input_select.select_option","data":{"option":"Away"}},{"service":"input_select.select_option","data":{"option":"Sleep"}}],"current_slot":3,"next_slot":0,"next_trigger":"2026-11-10T00:00:00-07:00"}},
+"switch.schedule_master_bedroom_2":{"entity_id":"switch.schedule_master_bedroom_2","state":"on","attributes":{"weekdays":["sat"],"timeslots":["00:00 - 23:59"],"entities":["input_select.master_bedroom_period"],"actions":[{"service":"input_select.select_option","data":{"option":"Sleep"}}],"current_slot":null,"next_slot":0,"next_trigger":"2026-11-14T00:00:00-07:00"}},
+"switch.schedule_master_bedroom_3":{"entity_id":"switch.schedule_master_bedroom_3","state":"on","attributes":{"weekdays":["sun"],"timeslots":["00:00 - 23:59"],"entities":["input_select.master_bedroom_period"],"actions":[{"service":"input_select.select_option","data":{"option":"Home"}}],"current_slot":null,"next_slot":0,"next_trigger":"2026-11-15T00:00:00-07:00"}},
+"input_boolean.vacation_mode":{"entity_id":"input_boolean.vacation_mode","state":"off","attributes":{}},
+"input_number.vacation_cool_setpoint":{"entity_id":"input_number.vacation_cool_setpoint","state":"82.0","attributes":{"min":65,"max":92,"step":1}},
+"input_number.vacation_heat_setpoint":{"entity_id":"input_number.vacation_heat_setpoint","state":"60.0","attributes":{"min":45,"max":79,"step":1}},
+"input_number.master_bedroom_home_cool":{"entity_id":"input_number.master_bedroom_home_cool","state":"76.0","attributes":{"min":65,"max":92,"step":1}},
+"input_number.master_bedroom_home_heat":{"entity_id":"input_number.master_bedroom_home_heat","state":"68.0","attributes":{"min":45,"max":79,"step":1}},
+"input_number.master_bedroom_sleep_cool":{"entity_id":"input_number.master_bedroom_sleep_cool","state":"74.0","attributes":{"min":65,"max":92,"step":1}},
+"input_number.master_bedroom_sleep_heat":{"entity_id":"input_number.master_bedroom_sleep_heat","state":"68.0","attributes":{"min":45,"max":79,"step":1}},
+"input_number.master_bedroom_away_cool":{"entity_id":"input_number.master_bedroom_away_cool","state":"77.0","attributes":{"min":65,"max":92,"step":1}},
+"input_number.master_bedroom_away_heat":{"entity_id":"input_number.master_bedroom_away_heat","state":"64.0","attributes":{"min":45,"max":79,"step":1}}
+}

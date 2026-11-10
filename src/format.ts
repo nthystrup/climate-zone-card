@@ -75,6 +75,33 @@ export function formatDuration(minutes: number): string {
   return `${h} h ${m} min`;
 }
 
+/** Wall-clock offset (ms) of the server time zone from UTC at instant t. */
+function tzOffset(t: number, tz?: string): number {
+  const p = new Intl.DateTimeFormat("en-US", {
+    timeZone: tz, hourCycle: "h23", year: "numeric", month: "numeric", day: "numeric",
+    hour: "numeric", minute: "numeric", second: "numeric",
+  }).formatToParts(new Date(t));
+  const g = (type: string) => Number(p.find((x) => x.type === type)?.value ?? 0);
+  return Date.UTC(g("year"), g("month") - 1, g("day"), g("hour") % 24, g("minute"), g("second")) - Math.floor(t / 1000) * 1000;
+}
+
+/** The instant of `minute` past midnight, `dayOffset` days from today, in the server's time zone. */
+export function serverInstant(dayOffset: number, minute: number, hass?: HomeAssistant, now = new Date()): Date {
+  const tz = serverTimeZone(hass);
+  try {
+    const wall = new Date(now.getTime() + tzOffset(now.getTime(), tz));
+    const guess = Date.UTC(wall.getUTCFullYear(), wall.getUTCMonth(), wall.getUTCDate() + dayOffset, 0, minute);
+    let t = guess - tzOffset(guess, tz);
+    t = guess - tzOffset(t, tz);
+    return new Date(t);
+  } catch {
+    const d = new Date(now);
+    d.setHours(0, minute, 0, 0);
+    d.setDate(d.getDate() + dayOffset);
+    return d;
+  }
+}
+
 /** Today's weekday in the server's time zone, 0 = Monday. */
 export function todayIndex(hass?: HomeAssistant, now = new Date()): number {
   const names = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];

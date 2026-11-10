@@ -1,6 +1,6 @@
 {
   "name": "climate-zone-card",
-  "version": "0.6.1",
+  "version": "0.6.2",
   "description": "Lovelace card for a schedule-driven climate zone (Scheduler + per-period setpoint helpers)",
   "scripts": {
     "build": "rollup -c",

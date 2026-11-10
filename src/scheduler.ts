@@ -207,8 +207,24 @@ export function moveBoundary(plan: DayPlan, i: number, target: number): DayPlan 
   return { starts, periods: plan.periods };
 }
 
-/** Merge neighbouring blocks (cyclically) that select the same period. */
-export function mergePlan(plan: DayPlan): DayPlan {
+/**
+ * Merge neighbouring blocks that select the same period. `cyclic` also merges
+ * the first block into the last (right for an every-day plan); for a plan used
+ * on only some days a midnight start must stay, because the previous day may
+ * end in a different period.
+ */
+export function mergePlan(plan: DayPlan, cyclic = true): DayPlan {
+  if (!cyclic) {
+    const order = plan.starts.map((s, i) => i).sort((a, b) => plan.starts[a] - plan.starts[b]);
+    const starts: number[] = [];
+    const periods: string[] = [];
+    for (const i of order) {
+      if (periods.length && periods[periods.length - 1] === plan.periods[i]) continue;
+      starts.push(plan.starts[i]);
+      periods.push(plan.periods[i]);
+    }
+    return { starts, periods };
+  }
   let starts = [...plan.starts];
   let periods = [...plan.periods];
   let changed = true;
@@ -259,21 +275,27 @@ export interface EditPayload {
   }[];
 }
 
-/** The single scheduler.edit call that saves a whole day. Merges same-period neighbours first. */
+/**
+ * The single scheduler.edit call that saves a whole day. Merges same-period
+ * neighbours first, across midnight only when the plan runs every day.
+ */
 export function buildEditPayload(
   scheduleEntity: string,
   periodEntity: string,
   plan: DayPlan,
   weekdays: string[] = ["daily"],
 ): EditPayload {
-  const blocks = planToBlocks(mergePlan(plan)).sort((a, b) => a.start - b.start);
+  const everyDay = expandWeekdays(weekdays).length === 7;
+  const merged = mergePlan(plan, everyDay);
+  const blocks = planToBlocks(merged).sort((a, b) => a.start - b.start);
   return {
     entity_id: scheduleEntity,
     weekdays,
     repeat_type: "repeat",
     timeslots: blocks.map((b) => ({
       start: formatHHMM(b.start),
-      stop: formatHHMM(b.stop),
+      // A single all-day block would otherwise read "00:00 - 00:00".
+      stop: formatHHMM(blocks.length === 1 ? b.start + DAY - 1 : b.stop),
       actions: [{ service: SELECT_SERVICE, entity_id: periodEntity, service_data: { option: b.period } }],
     })),
   };
@@ -488,10 +510,10 @@ export function planWeekSave(
   const groups: DayGroup[] = [];
   desired.forEach((p, d) => {
     if (!p) return;
-    const merged = mergePlan(p);
-    const g = groups.find((x) => planEquals(x.plan, merged));
+    // Keep the plan as drawn (buildEditPayload merges); a midnight start matters on some days.
+    const g = groups.find((x) => planEquals(x.plan, p));
     if (g) g.days.push(d);
-    else groups.push({ days: [d], plan: merged });
+    else groups.push({ days: [d], plan: p });
   });
 
   const remaining = [...sources];
@@ -514,8 +536,9 @@ export function planWeekSave(
       for (let n = 2; taken.has(`switch.schedule_${slugify(name)}`); n++) name = `${zoneName} ${n}`;
       const entityId = `switch.schedule_${slugify(name)}`;
       taken.add(entityId);
-      const { timeslots } = buildEditPayload(entityId, periodEntity, g.plan);
-      ops.push({ kind: "add", entityId, payload: { name, weekdays: weekdayTokens(g.days), repeat_type: "repeat", timeslots } });
+      const weekdays = weekdayTokens(g.days);
+      const { timeslots } = buildEditPayload(entityId, periodEntity, g.plan, weekdays);
+      ops.push({ kind: "add", entityId, payload: { name, weekdays, repeat_type: "repeat", timeslots } });
     }
   }
   for (const s of remaining) ops.push({ kind: "remove", entityId: s.entityId });
@@ -536,6 +559,30 @@ export function findScheduleEntities(
     if (Array.isArray(ents) && ents.includes(periodEntity) && Array.isArray(st.attributes?.timeslots)) out.add(id);
   }
   return [...out].sort();
+}
+
+/**
+ * The next time the period actually changes, from the merged week. Scheduler's
+ * own next_trigger can be a slot that re-selects the current period (a
+ * midnight "Sleep" after an evening "Sleep"). Searches up to a week ahead.
+ */
+export function nextPeriodChange(
+  week: WeekDays,
+  day: number,
+  minute: number,
+): { period: string; dayOffset: number; minute: number } | undefined {
+  const current = periodAtWeek(week, day, minute);
+  for (let k = 0; k <= 7; k++) {
+    const d = (day + k) % 7;
+    const plan = week[d];
+    if (!plan) continue;
+    const starts = plan.starts.map((s, i) => ({ s, p: plan.periods[i] })).sort((a, b) => a.s - b.s);
+    for (const { s, p } of starts) {
+      if (k === 0 && s <= minute) continue;
+      if (p !== current) return { period: p, dayOffset: k, minute: s };
+    }
+  }
+  return undefined;
 }
 
 /** The soonest upcoming period change across the zone's enabled schedules. */

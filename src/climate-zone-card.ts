@@ -21,8 +21,8 @@ import {
   type Thermostat,
 } from "./climate";
 import { computeStatus, fmtTemp, type Status } from "./status";
-import { formatMinutes, formatTime, nowMinutes, todayIndex } from "./format";
-import { DAY, DAY_SHORT, buildWeek, nextChange, parseSchedule, weekDayPieces, type ParsedSchedule, type Week } from "./scheduler";
+import { formatMinutes, formatTime, nowMinutes, serverInstant, todayIndex } from "./format";
+import { DAY, DAY_SHORT, buildWeek, nextChange, nextPeriodChange, parseSchedule, weekDayPieces, type ParsedSchedule, type Week } from "./scheduler";
 import { dialSvg } from "./dial";
 import { dailyRuntime, dayStarts, formatRuntime, sumDays, type DayRuntime } from "./runtime";
 import { ensureHistory, recordLive, runtimeEntry } from "./runtime-store";
@@ -30,7 +30,7 @@ import "./schedule-dialog";
 import "./editor";
 import type { ClimateZoneScheduleDialog } from "./schedule-dialog";
 
-const VERSION = "0.6.1";
+const VERSION = "0.6.2";
 const SEND_DELAY_MS = 1500;
 const PENDING_TIMEOUT_MS = 10000;
 
@@ -190,7 +190,9 @@ export class ClimateZoneCard extends LitElement {
     }
     const scheduleError = errors.length ? errors.join("; ") : undefined;
     const week = buildWeek(schedules);
-    const next = nextChange(schedules);
+    // Next real change of period from the merged week; Scheduler's next_trigger as a fallback.
+    const nc = nextPeriodChange(week.days, todayIndex(hass), nowMinutes(hass));
+    const next = nc ? { period: nc.period, at: serverInstant(nc.dayOffset, nc.minute, hass) } : nextChange(schedules);
 
     const override = st[cfg.override].state === "on";
     const vacation = st[cfg.vacation].state === "on";
