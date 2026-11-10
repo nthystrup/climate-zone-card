@@ -6,7 +6,7 @@
   await import("../dist/climate-zone-card.js");
   const q = new URLSearchParams(location.search);
   const states = await (await fetch("./" + (q.get("states") || "live-states.json"))).json();
-  const extra = q.get("climate") ? { climate: [q.get("climate")], name: q.get("name") } : {};
+  const extra = q.get("climate") ? { climate: q.get("climate").split(","), name: q.get("name") } : {};
   const hass = { states, locale: { language: "en", time_format: "12" }, config: { time_zone: "America/Phoenix" },
     themes: { darkMode: false }, callService: async (d, s, data) => { (window.calls ||= []).push([d, s, data]); }, callWS: async () => ({}) };
   for (const layout of ["full", "compact"]) {

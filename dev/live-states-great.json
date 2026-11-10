@@ -1,0 +1,15 @@
+{
+"climate.living_room":{"entity_id":"climate.living_room","state":"cool","attributes":{"hvac_modes":["off","heat","cool","heat_cool"],"min_temp":45,"max_temp":92,"current_temperature":77,"temperature":76,"target_temp_high":null,"target_temp_low":null,"current_humidity":39,"hvac_action":"idle","friendly_name":"Living Room Thermostat"},"last_updated":"2026-11-09T21:15:58.958602-07:00"},
+"climate.kitchen":{"entity_id":"climate.kitchen","state":"cool","attributes":{"hvac_modes":["off","heat","cool","heat_cool"],"min_temp":45,"max_temp":92,"current_temperature":77,"temperature":76,"target_temp_high":null,"target_temp_low":null,"current_humidity":35,"hvac_action":"idle","friendly_name":"Kitchen Thermostat"},"last_updated":"2026-11-09T21:09:59.040075-07:00"},
+"input_select.great_room_period":{"entity_id":"input_select.great_room_period","state":"Home","attributes":{"options":["Home","Sleep"]},"last_changed":"2026-11-09T21:14:48.885188-07:00"},
+"input_boolean.great_room_override":{"entity_id":"input_boolean.great_room_override","state":"off","attributes":{},"last_changed":"2026-11-09T21:14:58.009467-07:00"},
+"input_datetime.great_room_hold_until":{"entity_id":"input_datetime.great_room_hold_until","state":"2026-11-09 00:00:00","attributes":{"has_date":true,"has_time":true,"timestamp":1794207600}},
+"switch.schedule_great_room":{"entity_id":"switch.schedule_great_room","state":"on","attributes":{"weekdays":["daily"],"timeslots":["06:30 - 22:00","22:00 - 06:30"],"entities":["input_select.great_room_period"],"actions":[{"service":"input_select.select_option","data":{"option":"Home"}},{"service":"input_select.select_option","data":{"option":"Sleep"}}],"current_slot":0,"next_slot":1,"next_trigger":"2026-11-09T22:00:00-07:00"}},
+"input_boolean.vacation_mode":{"entity_id":"input_boolean.vacation_mode","state":"off","attributes":{}},
+"input_number.vacation_cool_setpoint":{"entity_id":"input_number.vacation_cool_setpoint","state":"82.0","attributes":{"min":65,"max":92,"step":1}},
+"input_number.vacation_heat_setpoint":{"entity_id":"input_number.vacation_heat_setpoint","state":"60.0","attributes":{"min":45,"max":79,"step":1}},
+"input_number.great_room_home_cool":{"entity_id":"input_number.great_room_home_cool","state":"76.0","attributes":{"min":65,"max":92,"step":1}},
+"input_number.great_room_home_heat":{"entity_id":"input_number.great_room_home_heat","state":"70.0","attributes":{"min":45,"max":79,"step":1}},
+"input_number.great_room_sleep_cool":{"entity_id":"input_number.great_room_sleep_cool","state":"76.0","attributes":{"min":65,"max":92,"step":1}},
+"input_number.great_room_sleep_heat":{"entity_id":"input_number.great_room_sleep_heat","state":"68.0","attributes":{"min":45,"max":79,"step":1}}
+}

@@ -30,7 +30,7 @@ import "./schedule-dialog";
 import "./editor";
 import type { ClimateZoneScheduleDialog } from "./schedule-dialog";
 
-const VERSION = "0.7.0";
+const VERSION = "0.7.1";
 const SEND_DELAY_MS = 1500;
 const PENDING_TIMEOUT_MS = 10000;
 
@@ -633,7 +633,7 @@ export class ClimateZoneCard extends LitElement {
             </div>
             <div class="rt-foot">
               ${ready
-                ? html`Last 7 days ${formatRuntime(week)} · ${formatRuntime(week / 7)} a day on average${linked ? html` · all ${ids.length} thermostats` : nothing}`
+                ? html`Last 7 days ${formatRuntime(week)} · ${formatRuntime(week / 7)} a day on average${linked ? html` · ${ids.length === 2 ? "both thermostats" : `all ${ids.length} thermostats`}` : nothing}`
                 : html`&nbsp;`}
             </div>`}
     </section>`;
