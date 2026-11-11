@@ -110,7 +110,8 @@
       callService: async (d, s, data) => {
         window.calls.push([d, s, data]);
         console.log("callService", d, s, JSON.stringify(data));
-        const st = { ...hass.states };
+        // Like Home Assistant: every update is a new hass object (the card compares old vs new).
+        const st = { ...card.hass.states };
         if (d === "input_boolean") {
           const id = data.entity_id; const cur = st[id];
           st[id] = { ...cur, state: s === "toggle" ? (cur.state === "on" ? "off" : "on") : s === "turn_on" ? "on" : "off" };
@@ -134,8 +135,7 @@
           }
           if (s === "remove") delete st[data.entity_id];
         }
-        hass.states = st;
-        card.hass = { ...hass };
+        card.hass = { ...card.hass, states: st };
       },
     };
     card.hass = hass;

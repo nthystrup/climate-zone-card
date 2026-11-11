@@ -28,7 +28,7 @@ Add the card from the dashboard's card picker (**Climate Zone Card**) and use th
 ### Layouts
 
 - `full` (default): dial, −/+, status line, day strip, guests toggle and the Schedule button.
-- `compact`: one row per room for phone dashboards: name, status, − / current temperature and target / +, and a thin day strip. −/+ work like the full card's (one `climate.set_temperature` 1.5 s after the last tap; in Heat/Cool they move the end that matches `hvac_action`). Tap anywhere else on the row to open the full card in a dialog, including the schedule editor.
+- `compact`: one row per room for phone dashboards: name, status, − / current temperature and target / +, and a thin day strip. −/+ work like the full card's (one `climate.set_temperature` 1.5 s after the last tap; in Heat/Cool they move the end that matches `hvac_action`). While the zone is on hold the row shows a **Resume** button (same as the full card's Resume schedule). Tap anywhere else on the row to open the full card in a dialog, including the schedule editor.
 - **Guests staying is optional.** The toggle and the "No guests staying" state only exist when `input_boolean.<zone>_occupied` exists (or `occupied:` is set); otherwise the room is always treated as occupied.
 
 ### YAML
@@ -88,6 +88,7 @@ If any required entity is missing the card shows an error listing the missing id
 
 ## Behaviour
 
+- **What the equipment is doing** (from each thermostat's `hvac_action`): the full card shows *Cooling*, *Heating*, *Fan running*, *Idle* or *Off* under the indoor reading, with an animated icon while running; the compact row shows the icon before the temperature. In a linked zone, if only some thermostats run, it names them ("Cooling · Kitchen").
 - **Status line**, first match wins: manual hold → vacation → guest room with no guests → current period.
 - **−/+** change the setpoint by `target_temp_step` (1° if absent), clamped to `min_temp`/`max_temp`. The number updates at once; one `climate.set_temperature` goes out 1.5 s after the last tap. In Heat/Cool, tap the low or high number to choose which end −/+ move.
 - A dial change is a manual hold by design: the controller turns the override on, not the card.

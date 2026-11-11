@@ -6,7 +6,9 @@ import { icon, modeIcon, periodIcon, type IconName } from "./icons";
 import { TONES, periodTone, toneVars, type Tone } from "./palette";
 import { discoverZones, periodColor, resolveConfig, setpointEntities, validateConfig, zoneEntities } from "./config";
 import {
+  activity,
   applyStep,
+  shortName,
   defaultEnd,
   inSync,
   isRange,
@@ -30,7 +32,7 @@ import "./schedule-dialog";
 import "./editor";
 import type { ClimateZoneScheduleDialog } from "./schedule-dialog";
 
-const VERSION = "0.7.1";
+const VERSION = "0.8.0";
 const SEND_DELAY_MS = 1500;
 const PENDING_TIMEOUT_MS = 10000;
 
@@ -295,6 +297,25 @@ export class ClimateZoneCard extends LitElement {
     this._call("climate", "set_hvac_mode", { entity_id: m.cfg.climate, hvac_mode: mode }).catch(() => {});
   }
 
+  private _activityIconName(kind: string): IconName | undefined {
+    return ({ cooling: "cool", defrosting: "cool", heating: "heat", fan: "fan", drying: "dry" } as Record<string, IconName>)[kind];
+  }
+
+  /** Full card: "❄ Cooling" / "Fan running" / "Idle" under the indoor reading. */
+  private _activityLine(a: ReturnType<typeof activity>) {
+    const name = this._activityIconName(a.kind);
+    return html`<div class="activity act-${a.kind}" role="status">
+      ${a.running && name ? html`<span class="act-ic">${icon(name, 15)}</span>` : nothing}<span>${a.label}</span>
+    </div>`;
+  }
+
+  /** Compact row: a small animated icon before the temperature while the equipment runs. */
+  private _activityIcon(a: ReturnType<typeof activity>) {
+    const name = this._activityIconName(a.kind);
+    if (!a.running || !name) return nothing;
+    return html`<span class="c-act act-${a.kind}" title=${a.label} role="img" aria-label=${a.label}>${icon(name, 16)}</span>`;
+  }
+
   private _resume(m: Model) {
     this._call("input_boolean", "turn_off", { entity_id: m.cfg.override }).catch(() => {});
   }
@@ -426,6 +447,7 @@ export class ClimateZoneCard extends LitElement {
       cfg.subtitle ??
       (cfg.occupied ? `Guest room · ${m.occupied ? "guests staying" : "no guests"}` : m.thermostats.length > 1 ? `${m.thermostats.length} thermostats` : "");
     const { canStep, atMin, atMax } = this._stepState(m);
+    const act = activity(m.thermostats);
     const indoor = [
       m.current !== undefined ? `Indoor ${fmtTemp(m.current)}°` : undefined,
       m.thermostats.length === 1 && m.lead.humidity !== undefined ? `${fmtTemp(m.lead.humidity)}% RH` : undefined,
@@ -492,6 +514,7 @@ export class ClimateZoneCard extends LitElement {
                   </div>`
                 : html`<div class="dial-num" aria-live="polite">${fmtTemp(sp.temperature)}<span class="deg">°</span></div>`}
             ${indoor ? html`<div class="indoor">${indoor}</div>` : nothing}
+            ${act.kind !== "unknown" && !off ? this._activityLine(act) : nothing}
           </div>
         </div>
 
@@ -508,7 +531,7 @@ export class ClimateZoneCard extends LitElement {
           ? html`<div class="tstats">
               ${m.thermostats.map(
                 (t) => html`<div class="tstat">
-                  <div class="t-name">${t.name}</div>
+                  <div class="t-name">${shortName(t.name)}</div>
                   <div class="t-temp">${fmtTemp(t.current)}°</div>
                   <div class="t-act">${t.action ? t.action[0].toUpperCase() + t.action.slice(1) : modeLabel(t.mode)}${
                     t.temperature !== undefined ? html` · ${fmtTemp(t.temperature)}°` : nothing
@@ -666,18 +689,23 @@ export class ClimateZoneCard extends LitElement {
     return html`
       <div class="card compact ${m.status.kind === "hold" ? "hold" : ""}">
         <div class="row">
-          <button class="c-open" aria-haspopup="dialog" @click=${this._openRoom}>
-            <span class="c-name">${cfg.name}${m.thermostats.length > 1 ? html` <span class="link">${icon("link", 16)}</span>` : nothing}</span>
-            <span class="c-status toned" style=${toneVars(m.tone)}>
-              <span class="dot"></span><span class="c-st">${!m.synced ? "Out of sync" : m.status.short}</span>
-            </span>
-            <span class="sr-only">Open room</span>
-          </button>
+          <div class="c-main">
+            <button class="c-open" aria-haspopup="dialog" @click=${this._openRoom}>
+              <span class="c-name">${cfg.name}${m.thermostats.length > 1 ? html` <span class="link">${icon("link", 16)}</span>` : nothing}</span>
+              <span class="c-status toned" style=${toneVars(m.tone)}>
+                <span class="dot"></span><span class="c-st">${!m.synced ? "Out of sync" : m.status.short}</span>
+              </span>
+              <span class="sr-only">Open room</span>
+            </button>
+            ${m.status.kind === "hold"
+              ? html`<button class="c-resume" aria-label="Resume schedule" @click=${() => this._resume(m)}>${icon("calendar", 14)}<span>Resume</span></button>`
+              : nothing}
+          </div>
           <button class="round c-step" aria-label="Lower${which} setpoint" ?disabled=${atMin} @click=${() => this._step(m, -1)}>
             ${icon("minus", 20)}
           </button>
           <div class="c-temp" aria-live="polite">
-            <div class="c-cur">${fmtTemp(m.current)}°</div>
+            <div class="c-cur">${this._activityIcon(activity(m.thermostats))}${fmtTemp(m.current)}°</div>
             <div class="c-target ${this._pending ? "pending" : ""}">${this._targetShort(m)}</div>
           </div>
           <button class="round c-step" aria-label="Raise${which} setpoint" ?disabled=${atMax} @click=${() => this._step(m, 1)}>
@@ -877,6 +905,56 @@ export class ClimateZoneCard extends LitElement {
         font-size: 30px;
         color: var(--czc-text2);
         padding: 0 2px;
+      }
+      .activity {
+        display: inline-flex;
+        align-items: center;
+        gap: 4px;
+        margin-top: 4px;
+        font-size: 12px;
+        font-weight: 600;
+        color: var(--czc-text2);
+        pointer-events: none;
+      }
+      .act-ic,
+      .c-act {
+        display: inline-flex;
+      }
+      .act-cooling,
+      .act-defrosting {
+        color: ${unsafeCSS(TONES.cool.fill)};
+      }
+      .act-heating {
+        color: ${unsafeCSS(TONES.heat.fill)};
+      }
+      .act-fan,
+      .act-drying {
+        color: color-mix(in srgb, ${unsafeCSS(TONES.cool.fill)} 55%, var(--czc-text2));
+      }
+      .act-fan .icon {
+        animation: czc-spin 1.6s linear infinite;
+      }
+      .act-cooling .icon,
+      .act-heating .icon,
+      .act-defrosting .icon,
+      .act-drying .icon {
+        animation: czc-pulse 2s ease-in-out infinite;
+      }
+      @keyframes czc-spin {
+        to {
+          transform: rotate(360deg);
+        }
+      }
+      @keyframes czc-pulse {
+        50% {
+          opacity: 0.45;
+        }
+      }
+      @media (prefers-reduced-motion: reduce) {
+        .act-ic .icon,
+        .c-act .icon {
+          animation: none;
+        }
       }
       .indoor {
         font-size: 14px;
@@ -1142,6 +1220,43 @@ export class ClimateZoneCard extends LitElement {
       }
       .c-err {
         margin: -4px 16px 8px;
+      }
+      .c-main {
+        flex: 1;
+        min-width: 0;
+        display: flex;
+        flex-direction: column;
+        align-items: flex-start;
+        gap: 4px;
+      }
+      .c-main .c-open {
+        flex: none;
+        width: 100%;
+      }
+      .c-resume {
+        position: relative;
+        z-index: 1;
+        display: inline-flex;
+        align-items: center;
+        gap: 5px;
+        height: 30px;
+        padding: 0 10px;
+        border-radius: 15px;
+        font-size: 12px;
+        font-weight: 600;
+        white-space: nowrap;
+        background: var(--czc-text);
+        color: var(--czc-bg);
+      }
+      /* 44 px hit area around the 30 px pill */
+      .c-resume::before {
+        content: "";
+        position: absolute;
+        inset: -7px -4px;
+      }
+      .c-act {
+        margin-right: 4px;
+        vertical-align: middle;
       }
       .c-cur {
         font-size: 28px;

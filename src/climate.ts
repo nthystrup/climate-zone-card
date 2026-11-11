@@ -142,3 +142,61 @@ export function modeTone(mode: string): "cool" | "heat" | "range" | "off" {
   if (isRange(mode)) return "range";
   return "off";
 }
+
+export type ActivityKind = "cooling" | "heating" | "fan" | "drying" | "defrosting" | "idle" | "off" | "unknown";
+
+export interface Activity {
+  kind: ActivityKind;
+  /** "Cooling", "Fan running", … ; for a linked zone where only some run: "Cooling · Kitchen". */
+  label: string;
+  running: boolean;
+}
+
+const ACTION_KIND: Record<string, ActivityKind> = {
+  cooling: "cooling",
+  heating: "heating",
+  preheating: "heating",
+  fan: "fan",
+  drying: "drying",
+  defrosting: "defrosting",
+  idle: "idle",
+  off: "off",
+};
+
+const KIND_LABEL: Record<ActivityKind, string> = {
+  cooling: "Cooling",
+  heating: "Heating",
+  fan: "Fan running",
+  drying: "Drying",
+  defrosting: "Defrosting",
+  idle: "Idle",
+  off: "Off",
+  unknown: "",
+};
+
+/** Most important first: something conditioning beats fan-only beats idle. */
+const PRIORITY: ActivityKind[] = ["heating", "cooling", "defrosting", "drying", "fan", "idle", "off", "unknown"];
+
+function kindOf(t: Thermostat): ActivityKind {
+  if (!t.available) return "unknown";
+  if (t.action) return ACTION_KIND[t.action] ?? "unknown";
+  return t.mode === "off" ? "off" : "unknown";
+}
+
+/** What the equipment is doing now, from hvac_action, across one or more thermostats. */
+export function activity(ts: Thermostat[]): Activity {
+  const kinds = ts.map(kindOf);
+  const kind = PRIORITY.find((k) => kinds.includes(k)) ?? "unknown";
+  const running = kind !== "idle" && kind !== "off" && kind !== "unknown";
+  let label = KIND_LABEL[kind];
+  if (running && ts.length > 1) {
+    const who = ts.filter((_, i) => kinds[i] === kind).map((t) => shortName(t.name));
+    if (who.length < ts.length) label += ` · ${who.join(", ")}`;
+  }
+  return { kind, label, running };
+}
+
+/** "Kitchen Thermostat" → "Kitchen". */
+export function shortName(name: string): string {
+  return name.replace(/\s+thermostat$/i, "").trim() || name;
+}

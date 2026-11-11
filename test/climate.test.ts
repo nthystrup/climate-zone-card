@@ -38,3 +38,27 @@ describe("linked zones", () => {
     expect(inSync([t({ temperature: 80 }), t({ temperature: 79 })])).toBe(false);
   });
 });
+
+describe("activity", async () => {
+  const { activity, shortName } = await import("../src/climate");
+  const th = (action: string | null, name = "Kitchen Thermostat", state = "cool") =>
+    readThermostat({ entity_id: "climate.x", state, attributes: { hvac_action: action, friendly_name: name, temperature: 76 } });
+  it("maps hvac_action to a label", () => {
+    expect(activity([th("cooling")])).toMatchObject({ kind: "cooling", label: "Cooling", running: true });
+    expect(activity([th("fan")])).toMatchObject({ kind: "fan", label: "Fan running", running: true });
+    expect(activity([th("idle")])).toMatchObject({ kind: "idle", label: "Idle", running: false });
+    expect(activity([th("preheating")]).kind).toBe("heating");
+    expect(activity([th(null, "x", "off")])).toMatchObject({ kind: "off", label: "Off", running: false });
+    expect(activity([readThermostat({ entity_id: "climate.x", state: "unavailable", attributes: {} })]).kind).toBe("unknown");
+  });
+  it("names the running thermostat in a linked zone", () => {
+    expect(activity([th("idle", "Living Room Thermostat"), th("cooling", "Kitchen Thermostat")]).label).toBe("Cooling · Kitchen");
+    expect(activity([th("cooling", "Living Room Thermostat"), th("cooling")]).label).toBe("Cooling");
+    expect(activity([th("fan", "Living Room Thermostat"), th("cooling")]).label).toBe("Cooling · Kitchen");
+    expect(activity([th("idle", "Living Room Thermostat"), th("idle")]).label).toBe("Idle");
+  });
+  it("shortens thermostat names", () => {
+    expect(shortName("Living Room Thermostat")).toBe("Living Room");
+    expect(shortName("Kitchen")).toBe("Kitchen");
+  });
+});
